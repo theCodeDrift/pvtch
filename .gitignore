@@ -206,3 +206,9 @@ dist
 
 # AI
 PLAN.md
+
+### Worktrees ###
+worktrees/
+
+### Turbo ###
+.turbo/

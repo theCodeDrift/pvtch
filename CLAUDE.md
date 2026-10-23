@@ -20,3 +20,13 @@ When creating commit messages:
 - **NEVER** add "Generated with Claude Code" or similar attribution lines
 - **NEVER** add `Co-Authored-By: Claude` or any AI co-author attribution
 - Developers are 100% accountable for all code they commit, regardless of how it was created
+
+## Worktrees
+
+When working in a git worktree:
+
+1. Worktrees live under `worktrees/` in the main checkout (never nested inside another worktree). `worktrees/` is git-ignored.
+2. A new worktree starts from the latest `main` unless told otherwise: `git fetch`, then rebase onto whichever of local `main` and `origin/main` is ahead.
+3. Run `pnpm install` in the worktree before running any of its scripts; dependencies installed in the main checkout may not resolve from a worktree.
+   - Write `workers/core/.dev.vars` in the worktree defining `DEVELOPMENT`, `DISABLE_CACHE`, `TWITCH_CLIENT_ID`, `TWITCH_SECRET`, `PVTCH_APP_URL` and `TWITCH_REDIRECT_URI` (local values; never read or copy another checkout's `.dev.vars`). Without it, `wrangler types` regenerates `worker-configuration.d.ts` with different vars and the committed file drifts.
+4. Do all work in the worktree, never in the main checkout.
