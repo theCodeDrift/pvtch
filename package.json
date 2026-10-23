@@ -13,6 +13,7 @@
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
     "syncpack": "^13.0.4",
+    "turbo": "^2.11.10",
     "typescript": "5.8.3",
     "typescript-eslint": "^8.19.0",
     "wrangler": "^4.59.2"
@@ -25,8 +26,11 @@
   },
   "private": true,
   "scripts": {
+    "lint": "turbo run lint",
     "openspec": "openspec",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
   },
   "type": "module"
 }

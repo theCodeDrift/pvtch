@@ -124,48 +124,42 @@ interface GitHubComment {
 
 ## Cross-Worker Durable Object Access
 
-### Use DurableObjectRPC for Cross-Worker DO Calls
+New Durable Objects live in `workers/storage` (script `pvtch-storage`). Other workers bind them with `script_name`, and `wrangler types` generates correctly typed stubs, so no wrapper type or cast is needed.
 
-When accessing Durable Objects from a different worker (e.g., dashboard accessing storage DOs), use `DurableObjectRPC<T>` from `@taskless/shared/rpc` instead of `DurableObjectStub<T>`.
-
-```typescript
-// ✅ Good - DurableObjectRPC for cross-worker access
-import type { DurableObjectRPC } from '@taskless/shared/rpc';
-import type { GitHubOrganizationDO } from '@taskless/storage';
-
-const orgDoId = env.GITHUB_ORGANIZATION_DO.idFromName(installId);
-const orgDO = env.GITHUB_ORGANIZATION_DO.get(
-  orgDoId
-) as DurableObjectRPC<GitHubOrganizationDO>;
-
-// ❌ Bad - DurableObjectStub doesn't correctly type RPC returns
-import type { GitHubOrganizationDO } from '@taskless/storage';
-
-const orgDO = env.GITHUB_ORGANIZATION_DO.get(
-  orgDoId
-) as DurableObjectStub<GitHubOrganizationDO>;
+```jsonc
+// workers/<binder>/wrangler.jsonc
+"durable_objects": {
+  "bindings": [
+    { "name": "TWITCH_CHANNEL", "class_name": "TwitchChannel", "script_name": "pvtch-storage" }
+  ]
+}
 ```
 
-**Rationale:**
-
-- RPC calls across workers are inherently async - all method returns become Promises
-- `DurableObjectStub<T>` doesn't correctly infer Promise-wrapped return types for cross-worker bindings
-- `DurableObjectRPC<T>` wraps all method returns in `Promise<>` for correct typing
-
-**When to use each:**
-
-| Context                              | Type to Use                                                  |
-| ------------------------------------ | ------------------------------------------------------------ |
-| Calling DO from **same** worker      | `DurableObjectStub<T>` (the default from a `get() operation) |
-| Calling DO from **different** worker | `DurableObjectRPC<T>`                                        |
-
-**Import pattern:**
-
 ```typescript
-// Type imports for cross-worker DO access
-import type { DurableObjectRPC } from '@taskless/shared/rpc';
-import type { UserDO, GitHubOrganizationDO } from '@taskless/storage';
+// ✅ Good - typed by wrangler types, no cast
+const stub = env.TWITCH_CHANNEL.get(
+  env.TWITCH_CHANNEL.idFromName(`twitch:${broadcasterId}`)
+);
+// stub is DurableObjectStub<TwitchChannel>, methods are typed automatically
+
+// ❌ Bad - hand-written casts drift from the real class
+const stub = env.TWITCH_CHANNEL.get(id) as SomeWrapper<TwitchChannel>;
 ```
+
+This works because the binder generates its types from both configs:
+
+```bash
+wrangler types -c wrangler.jsonc -c ../storage/wrangler.jsonc
+```
+
+which emits `DurableObjectNamespace<import("../storage/src/index").TwitchChannel>`. The binder's `tsconfig.json` must include `../storage/src/**/*` so the import resolves. Import storage code as types only (`import type`); at runtime every call goes through the binding.
+
+**Rules:**
+
+- Every DO class exported from `workers/storage/src/index.ts` gets an `Expect<AssertRPCSerializable<Class>>` assertion there. The type check can't see plain class instances (they look stubbable), so never return one from an RPC method; return plain objects.
+- `workers/storage` deploys before its binders. The GitHub deploy workflow handles this (storage is phase 1).
+- Removing a DO class takes two releases: binders drop the binding first, then storage deletes the class. See `workers/storage/wrangler.jsonc`.
+- The existing `User` and `PvtchBackend` DOs still live in `workers/core` and are bound only there.
 
 ## Code Quality Checks
 
@@ -173,16 +167,17 @@ import type { UserDO, GitHubOrganizationDO } from '@taskless/storage';
 
 ```bash
 # Run TypeScript type checking (required for all TypeScript changes)
-pnpm typecheck  # Runs typecheck across all packages
+pnpm typecheck  # Runs typecheck across all packages (turbo)
 
 # Run linting (required for all code changes)
 pnpm lint
 
+# Run tests
+pnpm test
+
 # For package-specific checks:
-pnpm --filter @taskless/shared typecheck
-pnpm --filter @taskless/storage typecheck
-pnpm --filter @taskless/generator typecheck
-pnpm --filter @taskless/dashboard typecheck
+pnpm --filter @pvtch/core typecheck
+pnpm --filter @pvtch/storage typecheck
 ```
 
 If any of these checks fail, you **MUST** fix the issues before marking the task as complete.

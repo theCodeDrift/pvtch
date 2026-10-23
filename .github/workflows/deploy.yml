@@ -1,0 +1,101 @@
+name: Deploy Workers
+
+# All workers deploy here via `turbo run deploy` (wrangler deploy), NOT via
+# Cloudflare Workers Builds. Workers Builds builds each worker independently
+# and cannot order one worker's deploy after another's, and pvtch needs
+# storage first.
+#
+# Behavior:
+# - main: real deploy. Every other ref: `--dry-run` (builds the bundle,
+#   never pushes or activates, needs no API token): safe per-branch validation.
+# - Two-phase, storage-first: `@pvtch/storage` defines the Durable Objects the
+#   other workers bind via `script_name: pvtch-storage`, so it deploys first
+#   when affected, decoupled from its binders. We do NOT use a `^deploy`
+#   task dependency: that redeploys storage on every binder change and couples
+#   a binder's deploy to it.
+# - Affected-scoped via turbo: only workers whose inputs changed deploy.
+# - The real (main) deploy warns and skips when CLOUDFLARE_API_TOKEN is absent.
+#
+# Adapted from taskless/taskless `.github/workflows/deploy.yml` (MIT).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/**'
+      - 'packages/**'
+      - 'turbo.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    paths:
+      - 'workers/**'
+      - 'packages/**'
+      - 'turbo.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy.yml'
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Least privilege: the job only reads the repo. Deploys authenticate to
+# Cloudflare with CLOUDFLARE_API_TOKEN (a separate secret), not GITHUB_TOKEN.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # turbo affected-detection diffs against the base commit
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.12.4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Deploy (two-phase storage-first; dry-run off main)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Real deploy on main; affected vs the previous main tip.
+            DRY=""
+            MODE="real deploy"
+            BASE="${{ github.event.before }}"
+            case "$BASE" in *[!0]*) ;; *) BASE="HEAD~1" ;; esac  # all-zeros (first push) -> HEAD~1
+            if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+              echo "::warning::CLOUDFLARE_API_TOKEN is not set; skipping the real deploy."
+              exit 0
+            fi
+          else
+            # Pull request: build only, nothing pushed or made live; no token needed.
+            DRY="-- --dry-run"
+            MODE="dry-run"
+            BASE="${{ github.event.pull_request.base.sha }}"
+            [ -n "$BASE" ] || BASE="origin/main"
+          fi
+
+          echo "Affected base: $BASE  (mode: $MODE)"
+
+          echo "::group::Phase 1: storage (iff affected)"
+          pnpm exec turbo run deploy --filter="@pvtch/storage[$BASE]" $DRY
+          echo "::endgroup::"
+
+          echo "::group::Phase 2: affected workers except storage"
+          pnpm exec turbo run deploy --filter="...[$BASE]" --filter="!@pvtch/storage" $DRY
+          echo "::endgroup::"

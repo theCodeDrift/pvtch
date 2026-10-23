@@ -39,18 +39,17 @@ jobs:
       # Type-aware lint rules (typescript-eslint/no-unsafe-*) need the
       # generated wrangler `Env` and react-router `Route.*` types. Run the
       # typegen + typecheck step first so lint isn't flagging every binding
-      # access as "unsafe assignment of an error typed value".
+      # access as "unsafe assignment of an error typed value". turbo runs
+      # each task across every workspace (@pvtch/core, @pvtch/storage).
       - name: Typecheck
-        run: pnpm --filter @pvtch/core typecheck
+        run: pnpm typecheck
 
       - name: Lint
-        run: pnpm --filter @pvtch/core lint
+        run: pnpm lint
 
-      - name: Unit tests
-        run: pnpm --filter @pvtch/core test:unit
-
-      # E2E tests run too. The lingo suite probes the AI binding in beforeAll
-      # and skips itself if the binding isn't reachable (CI has no Cloudflare
-      # credentials), so it won't fail the build.
-      - name: E2E tests
-        run: pnpm --filter @pvtch/core test:e2e
+      # Unit and E2E tests. The lingo E2E suite probes the AI binding in
+      # beforeAll and skips itself if the binding isn't reachable (CI has no
+      # Cloudflare credentials), so it won't fail the build. Storage tests run
+      # SQL on workerd's SQLite through Miniflare.
+      - name: Tests
+        run: pnpm test

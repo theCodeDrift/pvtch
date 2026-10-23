@@ -1,3 +1,8 @@
+// Older fork of the scheduler used by the core `User` DO (one-shot only,
+// public `scheduled()` host). `workers/storage/src/helpers/job-scheduler.ts`
+// is the current version (cron, handler callback); the two diverge
+// intentionally until `User` moves to storage.
+
 import { migrate } from '../migrate';
 import { jobSchedulerMigrations } from './migrations';
 

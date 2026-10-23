@@ -51,9 +51,13 @@ Create the following secrets in your Cloudflare dashboard or via `wrangler secre
 
 ### Deploy
 
+Merges to `main` deploy through `.github/workflows/deploy.yml`, which runs `turbo run deploy` for the workers that changed. `workers/storage` hosts Durable Objects that other workers bind, so it always deploys first; see [workers/storage/README.md](workers/storage/README.md#deploy-order).
+
+To deploy by hand, follow the same order:
+
 ```bash
-cd workers/core
-pnpm run deploy
+pnpm --filter @pvtch/storage deploy
+pnpm --filter @pvtch/core deploy
 ```
 
 # Use of AI In This Project

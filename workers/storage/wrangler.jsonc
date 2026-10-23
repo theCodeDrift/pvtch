@@ -1,0 +1,56 @@
+/**
+ * pvtch Storage Worker
+ *
+ * Hosts Durable Objects that other workers bind via
+ * `script_name: "pvtch-storage"`. Serves no public routes.
+ *
+ * Deploy order: this worker MUST deploy before any worker that binds it.
+ * `.github/workflows/deploy.yml` deploys it first (phase 1).
+ */
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pvtch-storage",
+  "main": "./src/index.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-04-01",
+  "upload_source_maps": true,
+  "workers_dev": false,
+
+  "observability": {
+    "enabled": true,
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TWITCH_CHANNEL",
+        "class_name": "TwitchChannel",
+      },
+    ],
+  },
+
+  /**
+   * Durable Object Migrations
+   * https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
+   *
+   * The migration list is an append-only record of what the account has
+   * already been told. Never remove a shipped tag.
+   *
+   * Removing a Durable Object class takes TWO releases, in this order:
+   *
+   *   1. binders drop their bindings to the class while storage still
+   *      exports it;
+   *   2. storage deletes the class (`deleted_classes` in a new tag).
+   *
+   * Attempting both at once wedges the deploy between two refusals that
+   * cannot both be satisfied: `10061` (cannot delete a class a deployed
+   * script still binds) and `10064` (cannot drop a class existing Durable
+   * Objects depend on). If a class removal looks like one commit, it is two.
+   */
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TwitchChannel"],
+    },
+  ],
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["eslint.config.js", "tsconfig.json"],
+  "tasks": {
+    "typecheck": {
+      "outputs": ["worker-configuration.d.ts", ".react-router/types/**"]
+    },
+    "lint": {
+      // Type-aware lint rules need the generated wrangler `Env` types.
+      "dependsOn": ["typecheck"]
+    },
+    "test": {
+      "dependsOn": ["typecheck"]
+    },
+    // No `^deploy`: that would redeploy storage on every binder change and
+    // couple a binder's deploy to it. Storage-first ordering is the deploy
+    // workflow's job (two phases), not a task dependency.
+    "deploy": {
+      "dependsOn": ["typecheck", "lint", "test"],
+      "cache": false,
+      "passThroughEnv": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "NODE_ENV"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

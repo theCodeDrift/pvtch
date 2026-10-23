@@ -1,0 +1,26 @@
+{
+  "name": "@pvtch/storage",
+  "dependencies": {
+    "cron-parser": "^5.5.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260114.0",
+    "vitest": "^4.0.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "private": true,
+  "scripts": {
+    "cf-typegen": "wrangler types",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --persist-to ../../.wrangler",
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm run cf-typegen && tsc --noEmit"
+  },
+  "type": "module"
+}

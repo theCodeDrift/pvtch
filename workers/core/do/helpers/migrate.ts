@@ -1,3 +1,6 @@
+// Older fork of `workers/storage/src/helpers/migrate.ts`, used by the core
+// `User` DO; the two diverge intentionally until `User` moves to storage.
+
 /**
  * SQLite schema migration helper for Durable Objects
  *
