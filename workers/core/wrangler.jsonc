@@ -50,10 +50,6 @@
       "binding": "PVTCH_ACCOUNTS",
       "id": "bc19b133947e4936b7ce4d808b27023e",
     },
-    {
-      "binding": "PVTCH_TRANSLATIONS",
-      "id": "04902249df1b4752b1e89742e3dc7643",
-    },
   ],
 
   "ai": {

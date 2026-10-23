@@ -213,6 +213,49 @@ export default function DeployYourOwn() {
         </ul>
       </div>
 
+      {/* How it's split up */}
+      <div id="how-pvtch-is-split-up" className="mb-12 scroll-mt-20">
+        <h2 className="text-2xl font-bold mb-4">How PVTCH Is Split Up</h2>
+        <div className="space-y-4 text-muted-foreground">
+          <p>
+            PVTCH deploys as more than one Cloudflare Worker, all from the same
+            repository:
+          </p>
+          <ul className="list-disc list-inside space-y-2 ml-2">
+            <li>
+              <strong>pvtch-storage</strong> (
+              <code className="bg-muted px-1 rounded">workers/storage</code>)
+              holds the Durable Objects that more than one worker needs. It has
+              no pages of its own.
+            </li>
+            <li>
+              <strong>pvtch-api</strong> (
+              <code className="bg-muted px-1 rounded">workers/core</code>) is
+              the website, widgets, OBS sources and Lingo.
+            </li>
+          </ul>
+          <p>
+            <strong>Why separate workers?</strong> A Durable Object lives in
+            exactly one worker. Other workers can reach it, but only through a
+            binding that names the worker it lives in (
+            <code className="bg-muted px-1 rounded">script_name</code>). Keeping
+            shared Durable Objects in a small worker of their own means
+            redeploying the website never touches them, and new workers, like
+            the upcoming chat bot, can share the same state.
+          </p>
+          <p>
+            <strong>Why storage deploys first:</strong> Cloudflare refuses to
+            deploy a worker whose binding points at a Durable Object class that
+            doesn't exist yet. Deploying{' '}
+            <code className="bg-muted px-1 rounded">pvtch-storage</code> first
+            creates those classes, so every worker that binds them deploys
+            cleanly. The same reasoning applies in reverse: to remove a class,
+            first remove the bindings to it, then remove the class from storage
+            in a later deploy.
+          </p>
+        </div>
+      </div>
+
       {/* Steps */}
       <div className="mb-12">
         <h2 className="text-2xl font-bold mb-6">Deployment Steps</h2>
@@ -307,10 +350,7 @@ wrangler login`}
 wrangler kv namespace create PVTCH_KV
 
 # Account/token mappings
-wrangler kv namespace create PVTCH_ACCOUNTS
-
-# Translation cache
-wrangler kv namespace create PVTCH_TRANSLATIONS`}
+wrangler kv namespace create PVTCH_ACCOUNTS`}
           </CodeBlock>
 
           <p>
@@ -329,10 +369,6 @@ wrangler kv namespace create PVTCH_TRANSLATIONS`}
   {
     "binding": "PVTCH_ACCOUNTS",
     "id": "YOUR_ACCOUNTS_ID_HERE"
-  },
-  {
-    "binding": "PVTCH_TRANSLATIONS",
-    "id": "YOUR_TRANSLATIONS_ID_HERE"
   }
 ]`}
           </CodeBlock>
@@ -383,17 +419,47 @@ pnpm run dev`}
         </Step>
 
         <Step number={6} title="Deploy">
-          <p>Build and deploy to Cloudflare Workers:</p>
+          <p>
+            Deploy the storage worker first, then the app (see{' '}
+            <a
+              href="#how-pvtch-is-split-up"
+              className="text-brand hover:underline"
+            >
+              why
+            </a>
+            ):
+          </p>
           <CodeBlock copyable>
-            {`cd workers/core
-pnpm run deploy`}
+            {`pnpm --filter @pvtch/storage deploy
+pnpm --filter @pvtch/core deploy`}
           </CodeBlock>
+          <p className="text-sm">
+            Each deploy runs typechecking, linting and tests first. Later
+            deploys only need the worker you changed; storage first whenever
+            both changed.
+          </p>
 
           <p>
             Your app will be available at{' '}
             <code className="bg-muted px-1 rounded">
               https://pvtch-api.YOUR_SUBDOMAIN.workers.dev
             </code>
+          </p>
+
+          <p>
+            <strong>Deploy from GitHub (optional):</strong> your fork includes{' '}
+            <code className="bg-muted px-1 rounded">
+              .github/workflows/deploy.yml
+            </code>
+            , which deploys every push to{' '}
+            <code className="bg-muted px-1 rounded">main</code> in the right
+            order, storage first, and only the workers that changed. Add{' '}
+            <code className="bg-muted px-1 rounded">CLOUDFLARE_API_TOKEN</code>{' '}
+            and{' '}
+            <code className="bg-muted px-1 rounded">CLOUDFLARE_ACCOUNT_ID</code>{' '}
+            as repository secrets to turn it on; without them it skips the
+            deploy with a warning. Don't also connect Cloudflare's own Git
+            builds to these workers: they can't deploy storage first.
           </p>
 
           <p>
@@ -443,6 +509,20 @@ ALLOWED_USERS=your_username,friend_username,another_user`}
             <p className="text-muted-foreground text-sm">
               Make sure the redirect URI in your Twitch app settings exactly
               matches what's in your wrangler.jsonc (including https vs http).
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold">
+              Deploy fails on a Durable Object binding
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              An error about a missing script or Durable Object class when
+              deploying <code className="bg-muted px-1 rounded">pvtch-api</code>{' '}
+              means storage isn't deployed yet, or is older than the app. Run{' '}
+              <code className="bg-muted px-1 rounded">
+                pnpm --filter @pvtch/storage deploy
+              </code>{' '}
+              and deploy the app again.
             </p>
           </div>
           <div>

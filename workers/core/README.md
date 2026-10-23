@@ -95,11 +95,10 @@ Configured in `wrangler.jsonc`:
 
 ### KV Namespaces
 
-| Binding              | Purpose                       |
-| -------------------- | ----------------------------- |
-| `PVTCH_KV`           | General key-value storage     |
-| `PVTCH_ACCOUNTS`     | Twitch auth token mappings    |
-| `PVTCH_TRANSLATIONS` | Translation cache (3-day TTL) |
+| Binding          | Purpose                    |
+| ---------------- | -------------------------- |
+| `PVTCH_KV`       | General key-value storage  |
+| `PVTCH_ACCOUNTS` | Twitch auth token mappings |
 
 ### Durable Objects
 
