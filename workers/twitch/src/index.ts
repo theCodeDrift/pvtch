@@ -7,6 +7,7 @@
 import { consume } from './consumer';
 import { handleEventSub } from './eventsub/webhook';
 import { adminBootstrap } from './routes/admin-bootstrap';
+import { adminStatus } from './routes/admin-status';
 import { botAuthorize, botCallback } from './routes/bot-authorize';
 
 export default {
@@ -27,6 +28,9 @@ export default {
       case 'GET /admin/bootstrap':
       case 'POST /admin/bootstrap': {
         return adminBootstrap(request, env);
+      }
+      case 'GET /admin/status': {
+        return adminStatus(request, env);
       }
       default: {
         return new Response('Not Found', { status: 404 });

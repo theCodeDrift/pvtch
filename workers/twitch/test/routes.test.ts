@@ -155,4 +155,10 @@ describe('admin routes', () => {
     );
     expect(response.status).toBe(403);
   });
+
+  it('refuses /admin/status for a non-admin', async () => {
+    const cookie = await login(t, 'viewer');
+    const response = await fetchWorker(get('/admin/status', cookie), t.env);
+    expect(response.status).toBe(403);
+  });
 });
