@@ -60,7 +60,7 @@
 - [ ] 7.2a Verify whether a scope-free re-login narrows the Twitch authorization (design Open Questions). If it does, make `/auth/start` request the recorded scopes for returning users.
 - [x] 7.3 Add a "Bots" section to the sidebar in `app/components/layout/app-layout.tsx`, with "Lingual" as its first entry. Register `bots/lingual`, `auth/grant` and `auth/grant/callback` in `app/routes.ts`.
 - [x] 7.4 Build the `/bots/lingual` page: bot status and subscription status, and enable/disable (enable calls `enableBot()` when `channel:bot` is recorded, otherwise redirects through `/auth/grant`, and handles `enable=1` and `grant_error` on return), and a link to `/helpers/lingo` for language settings. Use shadcn `Card`, `Badge` and `Button` and Sonner toasts, gated by `LINGUAL_PREVIEW_USERS`.
-- [x] 7.5 Add `/bot/authorize` and `/bot/callback` on `pvtch-twitch`: session check with the `pvtch_token` cookie through the shared KV, `ADMIN_USERS` gate (fail-closed), and a check that the authorizing user is `TWITCH_BOT_USER_ID`.
+- [x] 7.5 Add `/bot/authorize` and `/bot/callback` on `pvtch-twitch`: session check with the `pvtch_token` cookie through the shared KV, `ADMIN_USERS` gate (fail-closed) that also admits the bot account's own session, and a check that the authorizing user is `TWITCH_BOT_USER_ID`.
 - [x] 7.6 Add a regression test that login still requests no scopes.
 
 ## 8. Verify and roll out

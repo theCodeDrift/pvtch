@@ -46,4 +46,16 @@ export function isAdmin(env: Env, user: SessionUser | undefined): boolean {
   return admins.includes(user.login.toLowerCase());
 }
 
+/**
+ * /bot/* routes also admit the bot account itself, so it can log into www and
+ * grant its own scopes without juggling two Twitch logins. The callback still
+ * rejects any authorizing account other than the bot.
+ */
+export function canAuthorizeBot(
+  env: Env,
+  user: SessionUser | undefined
+): boolean {
+  return isAdmin(env, user) || user?.id === env.TWITCH_BOT_USER_ID;
+}
+
 export { readCookie };

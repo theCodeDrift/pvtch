@@ -17,6 +17,15 @@ async function login(t: TestEnv, login: string) {
   return `pvtch_token=tok-${login}`;
 }
 
+async function loginAsBot(t: TestEnv) {
+  await t.accounts.put('token-data-tok-bot', BOT_ID);
+  await t.accounts.put(
+    `twitch-data-${BOT_ID}`,
+    JSON.stringify({ id: BOT_ID, login: 'botlingual' })
+  );
+  return 'pvtch_token=tok-bot';
+}
+
 function get(path: string, cookie?: string) {
   return new Request(`https://twitch.example.com${path}`, {
     headers: cookie ? { Cookie: cookie } : {},
@@ -64,6 +73,12 @@ describe('admin routes', () => {
     expect(location.searchParams.get('redirect_uri')).toBe(
       'https://twitch.example.com/bot/callback'
     );
+  });
+
+  it('sends the bot account itself to Twitch without being an admin', async () => {
+    const cookie = await loginAsBot(t);
+    const response = await fetchWorker(get('/bot/authorize', cookie), t.env);
+    expect(response.status).toBe(302);
   });
 
   it('rejects a callback whose state does not match', async () => {
@@ -119,6 +134,18 @@ describe('admin routes', () => {
 
   it('refuses /admin/bootstrap for a non-admin', async () => {
     const cookie = await login(t, 'viewer');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/bootstrap', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      }),
+      t.env
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('refuses /admin/bootstrap for the bot account', async () => {
+    const cookie = await loginAsBot(t);
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/bootstrap', {
         method: 'POST',

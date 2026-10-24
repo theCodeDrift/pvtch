@@ -63,7 +63,7 @@ _Alternative considered:_ a service binding RPC from `pvtch-api` to `pvtch-twitc
 
 The consumer gets an app token through client credentials and caches it in KV (`PVTCH_KV`, key `twitch-app-token`) with a TTL of `expires_in - 300` seconds. On a 401 it refreshes once.
 
-The bot account authorizes `user:bot user:read:chat user:write:chat` once, through `twitch.pvtch.com/bot/authorize`, which is restricted to `ADMIN_USERS` (fail-closed: unlike `ALLOWED_USERS`, where an empty list means an open instance, an empty `ADMIN_USERS` admits no one). Its user id is a var, `TWITCH_BOT_USER_ID`. Broadcasters grant `channel:bot` through the general `/auth/grant` flow on www (Decision 11). Their token is thrown away after the code exchange confirms who they are.
+The bot account authorizes `user:bot user:read:chat user:write:chat` once, through `twitch.pvtch.com/bot/authorize`, which admits the bot account itself (by its session user id) or a user in `ADMIN_USERS` (fail-closed: unlike `ALLOWED_USERS`, where an empty list means an open instance, an empty `ADMIN_USERS` admits no one). Its user id is a var, `TWITCH_BOT_USER_ID`. Broadcasters grant `channel:bot` through the general `/auth/grant` flow on www (Decision 11). Their token is thrown away after the code exchange confirms who they are.
 
 Because pvtch stores no user tokens, there is nothing to refresh and nothing to leak.
 
@@ -147,7 +147,7 @@ The bot-account authorization is the one exception, on `twitch.pvtch.com/bot/*`.
 1. Create the bot Twitch account, then register both redirect URIs on the Twitch app.
 2. Create the queues `twitch-events` and `twitch-events-dlq` and the custom domain `twitch.pvtch.com`.
 3. Merge to main. The GitHub deploy workflow deploys `pvtch-storage` first (queue producer and reconcile job), then the affected workers (`pvtch-twitch` and `pvtch-api`).
-4. On `pvtch-twitch`, visit `/bot/authorize` once as a user in `ADMIN_USERS` to grant the bot's scopes. Create the app-level `user.authorization.revoke` subscription (a one-off admin action at `/admin/bootstrap`, restricted to `ALLOWED_USERS`).
+4. On `pvtch-twitch`, log into www as the bot account and visit `/bot/authorize` once to grant the bot's scopes. Create the app-level `user.authorization.revoke` subscription (a one-off admin action at `/admin/bootstrap`, restricted to `ALLOWED_USERS`).
 5. Roll out behind `LINGUAL_PREVIEW_USERS` (starting with `theCodeDrift`). `ALLOWED_USERS` can't be the gate: empty means the whole instance is open, and production runs it empty.
 6. Rollback: hide the enable UI and enqueue `unsubscribe` for every enabled channel. Workers can be rolled back on their own, because the enable flag lives in `TwitchChannel`.
 

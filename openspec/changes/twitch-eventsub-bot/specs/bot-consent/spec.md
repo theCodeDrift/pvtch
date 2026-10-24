@@ -50,11 +50,11 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots
 
 ### Requirement: One-time bot account authorization
 
-`pvtch-twitch` SHALL provide `GET /bot/authorize` that redirects to Twitch authorize with `scope=user:bot user:read:chat user:write:chat` and `redirect_uri=https://twitch.pvtch.com/bot/callback`, and `GET /bot/callback` that exchanges the code and verifies the authorizing user's id equals `TWITCH_BOT_USER_ID`. This is separate from `/auth/grant` because the authorizing Twitch account is the bot, not the logged-in pvtch user. Both routes SHALL require a valid pvtch session (the `pvtch_token` cookie, set on `Domain=pvtch.com`, resolved through the shared `PVTCH_ACCOUNTS` KV) belonging to a user in `ADMIN_USERS` (a comma-separated list of Twitch logins on `pvtch-twitch`; empty allows no one). The resulting tokens SHALL NOT be stored.
+`pvtch-twitch` SHALL provide `GET /bot/authorize` that redirects to Twitch authorize with `scope=user:bot user:read:chat user:write:chat` and `redirect_uri=https://twitch.pvtch.com/bot/callback`, and `GET /bot/callback` that exchanges the code and verifies the authorizing user's id equals `TWITCH_BOT_USER_ID`. This is separate from `/auth/grant` because the authorizing Twitch account is the bot, not the logged-in pvtch user. Both routes SHALL require a valid pvtch session (the `pvtch_token` cookie, set on `Domain=pvtch.com`, resolved through the shared `PVTCH_ACCOUNTS` KV) belonging either to the bot account itself (session user id equals `TWITCH_BOT_USER_ID`) or to a user in `ADMIN_USERS` (a comma-separated list of Twitch logins on `pvtch-twitch`; empty allows no one). Admitting the bot account lets it log into www and open `/bot/authorize` with a single Twitch login; the callback's id check still rejects every other authorizing account. The resulting tokens SHALL NOT be stored.
 
 #### Scenario: Bot account grants scopes
 
-- **WHEN** an allowed user completes the flow logged into Twitch as the bot account
+- **WHEN** an admin or the bot account completes the flow logged into Twitch as the bot account
 - **THEN** the callback confirms the grant and shows success
 
 #### Scenario: Wrong Twitch account
@@ -64,5 +64,10 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots
 
 #### Scenario: Not an allowed user
 
-- **WHEN** a user not in `ADMIN_USERS`, or anyone while `ADMIN_USERS` is empty, requests `/bot/authorize`
+- **WHEN** a user who is neither the bot account nor in `ADMIN_USERS` requests `/bot/authorize`
 - **THEN** the response is HTTP 403
+
+#### Scenario: Bot account logged into www
+
+- **WHEN** the bot account, logged into www and not in `ADMIN_USERS`, requests `/bot/authorize`
+- **THEN** it is redirected to Twitch; `/admin/bootstrap` still returns HTTP 403 for it

@@ -580,10 +580,10 @@ pnpm --filter @pvtch/twitch deploy`}
 # any random 10-100 characters`}
           </CodeBlock>
           <p>
-            After deploying, log into Twitch <strong>as the bot account</strong>{' '}
-            and open{' '}
+            After deploying, log into Twitch and your PVTCH site{' '}
+            <strong>as the bot account</strong> and open{' '}
             <code className="bg-muted px-1 rounded">/bot/authorize</code> on the
-            bot&apos;s domain, then open{' '}
+            bot&apos;s domain. Then log back in as yourself, open{' '}
             <code className="bg-muted px-1 rounded">/admin/bootstrap</code> and
             press its button. Streamers then turn Lingual on from Bots &rarr;
             Lingual.

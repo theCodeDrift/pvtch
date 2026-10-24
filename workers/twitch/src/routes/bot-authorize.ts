@@ -1,7 +1,7 @@
 import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 
-import { getSessionUser, isAdmin, readCookie } from '../session';
+import { canAuthorizeBot, getSessionUser, readCookie } from '../session';
 
 const BOT_SCOPES = 'user:bot user:read:chat user:write:chat';
 const STATE_COOKIE = 'pvtch_bot_state';
@@ -21,8 +21,8 @@ function page(status: number, message: string): Response {
 }
 
 /**
- * GET /bot/authorize: one-time grant of the bot account's own scopes. An
- * admin opens this while logged into Twitch as the bot account. Separate from
+ * GET /bot/authorize: one-time grant of the bot account's own scopes. The
+ * bot account (or an admin) opens this while logged into Twitch as the bot. Separate from
  * www's /auth/grant because the account authorizing is the bot, not the
  * logged-in pvtch user.
  */
@@ -30,7 +30,7 @@ export async function botAuthorize(
   request: Request,
   env: Env
 ): Promise<Response> {
-  if (!isAdmin(env, await getSessionUser(request, env))) {
+  if (!canAuthorizeBot(env, await getSessionUser(request, env))) {
     return new Response(undefined, { status: 403 });
   }
   const state = crypto.randomUUID();
@@ -58,7 +58,7 @@ export async function botCallback(
   request: Request,
   env: Env
 ): Promise<Response> {
-  if (!isAdmin(env, await getSessionUser(request, env))) {
+  if (!canAuthorizeBot(env, await getSessionUser(request, env))) {
     return new Response(undefined, { status: 403 });
   }
   const url = new URL(request.url);

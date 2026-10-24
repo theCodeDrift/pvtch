@@ -26,7 +26,7 @@ twitch-events consumer ──▶ dedupe (TwitchChannel.claimMessage)
 | `TWITCH_CLIENT_ID`       | var           | The pvtch Twitch app. Must be the same app as `pvtch-api`, because broadcasters grant `channel:bot` to that client.                                           |
 | `TWITCH_BOT_USER_ID`     | var           | The bot account's Twitch user id (`botlingual`: `1591556954`)                                                                                                 |
 | `TWITCH_APP_URL`         | var           | `https://twitch.pvtch.com` (EventSub callback and `/bot/callback` base)                                                                                       |
-| `ADMIN_USERS`            | var           | Twitch logins allowed on `/bot/*` and `/admin/*`. Empty allows no one.                                                                                        |
+| `ADMIN_USERS`            | var           | Twitch logins allowed on `/bot/*` and `/admin/*` (the bot account is also allowed on `/bot/*`). Empty allows no one.                                          |
 | `TWITCH_SECRET`          | Secrets Store | The Twitch app's client secret, shared with `pvtch-api` (store `a50693a341154908beed43817b887121`). Read it with `readSecret()` from `@pvtch/shared/secrets`. |
 | `TWITCH_EVENTSUB_SECRET` | Secrets Store | EventSub signing secret, 10–100 characters                                                                                                                    |
 
@@ -41,7 +41,7 @@ For local development, follow `.dev.vars.example` to put both secrets in Wrangle
 2. Create the queues: `wrangler queues create twitch-events` and `wrangler queues create twitch-events-dlq`.
 3. Put the Twitch app's client secret in the account's Secrets Store as `TWITCH_SECRET` (both workers bind it), and add `TWITCH_EVENTSUB_SECRET` (10–100 random characters) to the same store.
 4. Deploy (see below). The custom domain `twitch.pvtch.com` comes from `routes` in `wrangler.jsonc`.
-5. As a user in `ADMIN_USERS`, log into Twitch **as the bot account** and open `https://twitch.pvtch.com/bot/authorize`. This grants the bot `user:bot user:read:chat user:write:chat`.
+5. Log into Twitch **as the bot account**, log into www with it, and open `https://twitch.pvtch.com/bot/authorize`. This grants the bot `user:bot user:read:chat user:write:chat`.
 6. Open `https://twitch.pvtch.com/admin/bootstrap` and press the button. This creates the app-wide `user.authorization.revoke` subscription.
 7. A user in `LINGUAL_PREVIEW_USERS` (a `pvtch-api` var) opens Bots → Lingual on www and turns it on.
 
