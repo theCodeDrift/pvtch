@@ -1,8 +1,14 @@
-## ADDED Requirements
+# e2e-testing Specification
+
+## Purpose
+
+End-to-end tests for `workers/core` that run against real Cloudflare bindings (notably Workers AI) through `getPlatformProxy`, covering the Lingo translation pipeline's output structure and token preservation, and skipping cleanly when the bindings are unreachable.
+
+## Requirements
 
 ### Requirement: Vitest e2e test infrastructure
 
-The system SHALL provide a vitest configuration at `workers/core/vitest.config.ts` that runs e2e tests from the `e2e/` directory. The configuration SHALL resolve `@/` path aliases via `vite-tsconfig-paths` and set a test timeout of at least 30 seconds to accommodate AI API calls.
+The system SHALL provide a vitest configuration at `workers/core/vitest.config.ts` that runs e2e tests from the `e2e/` directory. The configuration SHALL resolve the `@/` path alias to `app/` (via `resolve.alias`), SHALL NOT alias `cloudflare:workers` (Miniflare needs the real module), and SHALL set a test timeout of at least 30 seconds to accommodate AI API calls.
 
 #### Scenario: Running e2e tests
 
@@ -17,6 +23,11 @@ The e2e test suite SHALL use `getPlatformProxy` from wrangler to obtain real Clo
 
 - **WHEN** the lingo e2e test runs
 - **THEN** `env.AI` is a live proxy to Cloudflare Workers AI and can execute model inference
+
+#### Scenario: Bindings unreachable
+
+- **WHEN** `getPlatformProxy` fails or the AI binding cannot be reached (for example in CI without Cloudflare credentials, or without `wrangler login`)
+- **THEN** the translation tests are skipped with a logged reason instead of failing the run
 
 ### Requirement: Lingo translation structural assertions
 
@@ -64,14 +75,3 @@ The `workers/core/package.json` SHALL include a `test:e2e` script that runs vite
 
 - **WHEN** a developer runs `pnpm test:e2e` from `workers/core/`
 - **THEN** vitest runs using `vitest.config.ts` and executes the e2e test suite
-
-## REMOVED Requirements
-
-### Requirement: Dev-only /lingo/test route
-
-The `/lingo/test` HTTP route and its route registration SHALL be removed. The vitest e2e test replaces this functionality.
-
-#### Scenario: /lingo/test is no longer accessible
-
-- **WHEN** a user navigates to `/lingo/test`
-- **THEN** the route does not exist (falls through to 404)
