@@ -13,7 +13,7 @@ describe('canUseLingual', () => {
 
   it('refuses everyone else', () => {
     expect(canUseLingual(envWith('theCodeDrift'), 'viewer')).toBe(false);
-    expect(canUseLingual(envWith('theCodeDrift'), undefined)).toBe(false);
+    expect(canUseLingual(envWith('theCodeDrift'))).toBe(false);
   });
 
   it('refuses everyone when the list is empty', () => {

@@ -47,7 +47,7 @@ describe('admin routes', () => {
 
   it('refuses everyone when ADMIN_USERS is empty', async () => {
     const cookie = await login(t, 'admin_user');
-    const env = { ...t.env, ADMIN_USERS: '' } as Env;
+    const env = { ...t.env, ADMIN_USERS: '' } as unknown as Env;
     const response = await fetchWorker(get('/bot/authorize', cookie), env);
     expect(response.status).toBe(403);
   });

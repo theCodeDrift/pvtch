@@ -7,7 +7,7 @@
   "upload_source_maps": true,
 
   "vars": {
-    "TWITCH_CLIENT_ID": "dinofhiya3gwjh5feq4di7oeurrxdp",
+    "TWITCH_CLIENT_ID": "yrx2abngfobvh0zhgdwgwbr5yzbqop",
     "TWITCH_REDIRECT_URI": "https://www.pvtch.com/auth/callback",
     "PVTCH_APP_URL": "https://www.pvtch.com",
     "ALLOWED_USERS": "",
