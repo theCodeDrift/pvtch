@@ -45,4 +45,4 @@
 - [x] 6.2 Run `pnpm --filter @pvtch/storage dev`, then hit `/` to confirm the 404 and that state persists under `.wrangler/`.
 - [x] 6.3 Add `turbo` and a root `turbo.json` with `deploy`, `typecheck`, `lint` and `test` tasks, and give each worker a `deploy` script. Do not add a `^deploy` dependency.
 - [x] 6.4 Add `.github/workflows/deploy.yml`, lifted from Taskless: affected-scoped, two-phase storage-first, `--dry-run` on pull requests, and skipping with a warning when the token is absent. Extend `ci.yml` to typecheck, lint and test `@pvtch/storage`.
-- [ ] 6.5 Add the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets. Merge, then confirm phase 1 deployed `pvtch-storage`. Disconnect Workers Builds from `pvtch-api`.
+- [x] 6.5 Add the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets. Merge, then confirm phase 1 deployed `pvtch-storage`. Disconnect Workers Builds from `pvtch-api`.
