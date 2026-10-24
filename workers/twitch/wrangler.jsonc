@@ -2,14 +2,14 @@
  * pvtch Twitch Worker
  *
  * EventSub webhook endpoint and the Lingual chat bot, on twitch.pvtch.com.
- * Serves no user-facing pages: settings live on www (pvtch-api).
+ * Serves no user-facing pages: settings live on www (pvtch).
  *
  * Secrets come from the account Secrets Store (secrets_store_secrets below):
- *   TWITCH_SECRET           Twitch app client secret (shared with pvtch-api)
+ *   TWITCH_SECRET           Twitch app client secret (shared with pvtch)
  *   TWITCH_EVENTSUB_SECRET  EventSub webhook signing secret (10-100 chars)
  *
- * Deploy order: pvtch-storage first (TWITCH_CHANNEL), and pvtch-api must
- * already exist (PVTCH_USER). The twitch-events queues must exist.
+ * Deploy order: pvtch-storage first (TWITCH_CHANNEL). The twitch-events
+ * queues must exist.
  */
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
@@ -40,7 +40,7 @@
 
   /**
    * Account-level Secrets Store. TWITCH_SECRET is the shared Twitch app's
-   * client secret, used by pvtch-api and pvtch-twitch. Read it with
+   * client secret, used by pvtch and pvtch-twitch. Read it with
    * readSecret() from @pvtch/shared/secrets: a store binding is an object
    * with an async get(), not a string.
    */
@@ -83,12 +83,6 @@
         "name": "TWITCH_CHANNEL",
         "class_name": "TwitchChannel",
         "script_name": "pvtch-storage",
-      },
-      {
-        // Read-only: the bot reads lingo().getConfig() from core's User DO.
-        "name": "PVTCH_USER",
-        "class_name": "User",
-        "script_name": "pvtch-api",
       },
     ],
   },

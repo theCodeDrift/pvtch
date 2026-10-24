@@ -370,4 +370,31 @@ describe('TwitchChannel', () => {
       expect(channel.acquireSendSlot().ok).toBe(false);
     });
   });
+
+  describe('Lingual settings', () => {
+    it('starts with no language and no ignored chatters', () => {
+      expect(channel.getLingualSettings()).toEqual({
+        // eslint-disable-next-line unicorn/no-null -- RPC returns null
+        language: null,
+        ignoredChatters: [],
+      });
+    });
+
+    it('normalizes and persists settings across instances', () => {
+      channel.setLingualSettings({
+        language: ' Spanish ',
+        ignoredChatters: ['@StreamElements', 'nightbot', 'NIGHTBOT', ' '],
+      });
+      expect(construct().getLingualSettings()).toEqual({
+        language: 'spanish',
+        ignoredChatters: ['streamelements', 'nightbot'],
+      });
+    });
+
+    it('clears the language when given an empty one', () => {
+      channel.setLingualSettings({ language: 'english', ignoredChatters: [] });
+      channel.setLingualSettings({ language: '', ignoredChatters: [] });
+      expect(channel.getLingualSettings().language).toBeNull();
+    });
+  });
 });

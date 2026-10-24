@@ -14,16 +14,13 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  // Storage and core sources are included for types only: the generated Env
-  // types TWITCH_CHANNEL via ../storage/src, and src/user-stub.ts types the
-  // PVTCH_USER binding with core's User class.
+  // Storage sources are included for types only: the generated Env types
+  // TWITCH_CHANNEL via ../storage/src.
   "include": [
     "src/**/*",
     "test/**/*",
     "worker-configuration.d.ts",
-    "env.d.ts",
-    "../storage/src/**/*",
-    "../core/do/**/*"
+    "../storage/src/**/*"
   ],
   "exclude": ["node_modules"]
 }

@@ -2,7 +2,7 @@
  * pvtch Twitch Worker (twitch.pvtch.com)
  *
  * Receives EventSub webhooks, queues them, and runs the Lingual chat bot from
- * the queue consumer. User-facing settings live on www (pvtch-api).
+ * the queue consumer. User-facing settings live on www (pvtch).
  */
 import { consume } from './consumer';
 import { handleEventSub } from './eventsub/webhook';

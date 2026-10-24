@@ -1,14 +1,16 @@
 import { useEffect } from 'react';
 import {
   Form,
-  Link,
   data,
   redirect,
   useActionData,
+  useFetcher,
   useLoaderData,
   useNavigation,
 } from 'react-router';
+import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
+import { findSupportedTargetLanguage } from '@pvtch/shared/supported-languages';
 import { Bot, CheckCircle, Clock, Loader, XCircle } from 'lucide-react';
 import type { Route } from './+types/bots.lingual';
 import {
@@ -21,6 +23,9 @@ import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/twitch-data';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { LanguageCombobox } from '@/components/language-combobox';
 import {
   Card,
   CardContent,
@@ -57,6 +62,13 @@ async function hasLingualScope(env: Env, userId: string): Promise<boolean> {
   return record?.scopes?.includes(LINGUAL_SCOPE) ?? false;
 }
 
+const MAX_IGNORED_CHATTERS = 25;
+
+function formField(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === 'string' ? value : '';
+}
+
 const GRANT_URL = `/auth/grant?${new URLSearchParams({
   scopes: LINGUAL_SCOPE,
   return_to: '/bots/lingual?enable=1',
@@ -88,15 +100,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     return redirect('/bots/lingual?enabled=1');
   }
 
-  const [bot, subscription, lingoConfig] = await Promise.all([
+  const [bot, subscription, settings] = await Promise.all([
     channel.getBot(),
     channel.getSubscription(CHAT_SUBSCRIPTION),
-    (async () => {
-      using lingo = await env.PVTCH_USER.get(
-        env.PVTCH_USER.idFromName(`twitch:${user.id}`)
-      ).lingo();
-      return lingo.getConfig();
-    })(),
+    channel.getLingualSettings(),
   ]);
 
   const grantError = url.searchParams.get('grant_error');
@@ -104,7 +111,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     state: 'ready' as const,
     enabled: bot.enabled,
     subscriptionStatus: subscription?.status ?? undefined,
-    language: lingoConfig?.language,
+    language: settings.language ?? '',
+    ignoredChatters: settings.ignoredChatters,
     botLogin: env.LINGUAL_BOT_LOGIN,
     justEnabled: url.searchParams.get('enabled') === '1',
     grantError: grantError
@@ -132,6 +140,27 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === 'disable') {
     await channel.disableBot();
     return data({ ok: 'disabled' as const });
+  }
+  if (intent === 'settings') {
+    const resolved = findSupportedTargetLanguage(
+      formField(formData, 'language').slice(0, 60)
+    );
+    if (!resolved) {
+      return data(
+        { error: 'Pick a supported language from the list.' },
+        { status: 400 }
+      );
+    }
+    const ignoredChatters = formField(formData, 'ignored')
+      .split(',')
+      .map((login) => login.trim())
+      .filter((login) => login.length > 0 && login.length < 64)
+      .slice(0, MAX_IGNORED_CHATTERS);
+    await channel.setLingualSettings({
+      language: resolved.name,
+      ignoredChatters,
+    });
+    return data({ ok: 'saved' as const });
   }
   return data({ error: 'Unknown action' }, { status: 400 });
 }
@@ -168,6 +197,103 @@ function StatusBadge({
     <Badge variant="destructive" className="gap-1">
       <XCircle className="size-3" /> {status.replaceAll('_', ' ')}
     </Badge>
+  );
+}
+
+function LingualSettingsForm({
+  language,
+  ignoredChatters,
+}: {
+  language: string;
+  ignoredChatters: string[];
+}) {
+  const fetcher = useFetcher<typeof action>();
+  const saving = fetcher.state !== 'idle';
+
+  const form = useForm({
+    defaultValues: { language, ignored: ignoredChatters.join(', ') },
+    onSubmit: ({ value }) => {
+      void fetcher.submit({ intent: 'settings', ...value }, { method: 'POST' });
+    },
+  });
+
+  useEffect(() => {
+    form.reset({ language, ignored: ignoredChatters.join(', ') });
+  }, [language, ignoredChatters]);
+
+  useEffect(() => {
+    if (fetcher.state !== 'idle' || !fetcher.data) return;
+    if ('ok' in fetcher.data) toast.success('Lingual settings saved');
+    else toast.error(fetcher.data.error);
+  }, [fetcher.state, fetcher.data]);
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void form.handleSubmit();
+      }}
+      className="flex flex-col gap-6"
+    >
+      <form.Field
+        name="language"
+        validators={{
+          onSubmit: ({ value }) =>
+            findSupportedTargetLanguage(value)
+              ? undefined
+              : 'Pick a supported language from the list.',
+        }}
+        children={(field) => (
+          <Field>
+            <FieldLabel htmlFor="lingual-language">Your language</FieldLabel>
+            <LanguageCombobox
+              id="lingual-language"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(value) => field.handleChange(value)}
+            />
+            {field.state.meta.errors.length > 0 ? (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]}
+              </p>
+            ) : (
+              <FieldDescription>
+                Lingual translates messages that aren&apos;t in this language
+                into it.
+              </FieldDescription>
+            )}
+          </Field>
+        )}
+      />
+      <form.Field
+        name="ignored"
+        children={(field) => (
+          <Field>
+            <FieldLabel htmlFor="lingual-ignored">Ignored chatters</FieldLabel>
+            <Input
+              id="lingual-ignored"
+              autoComplete="off"
+              placeholder="yourbot, anotherbot"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+            />
+            <FieldDescription>
+              Lingual never translates messages from these accounts. Separate
+              names with commas (max {MAX_IGNORED_CHATTERS}). Common chat bots
+              are already ignored.
+            </FieldDescription>
+          </Field>
+        )}
+      />
+      <div className="flex justify-end">
+        <Button type="submit" disabled={saving}>
+          {saving && <Loader className="size-4 animate-spin" />}
+          Save settings
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -243,25 +369,10 @@ export default function BotsLingual() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
-              {loaderData.language ? (
+              {!loaderData.language && (
                 <p>
-                  Translating into{' '}
-                  <span className="font-medium capitalize text-zinc-900 dark:text-zinc-50">
-                    {loaderData.language}
-                  </span>
-                  . Change the language and ignored users in{' '}
-                  <Link to="/helpers/lingo" className="text-brand underline">
-                    Lingo settings
-                  </Link>
-                  .
-                </p>
-              ) : (
-                <p>
-                  Pick a target language in{' '}
-                  <Link to="/helpers/lingo" className="text-brand underline">
-                    Lingo settings
-                  </Link>{' '}
-                  first. Lingual stays quiet until one is set.
+                  Pick your language below. Lingual stays quiet until one is
+                  set.
                 </p>
               )}
               <p>
@@ -295,6 +406,24 @@ export default function BotsLingual() {
                 )}
               </Form>
             </CardFooter>
+          </Card>
+        )}
+
+        {loaderData.state === 'ready' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Settings</CardTitle>
+              <CardDescription>
+                Lingual&apos;s own settings. They are separate from the Lingo
+                helper&apos;s.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LingualSettingsForm
+                language={loaderData.language}
+                ignoredChatters={loaderData.ignoredChatters}
+              />
+            </CardContent>
           </Card>
         )}
       </AuthGate>

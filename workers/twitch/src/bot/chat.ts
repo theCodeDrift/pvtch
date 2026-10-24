@@ -6,7 +6,6 @@ import type { ChatMessageEvent } from '../eventsub/schemas';
 import { translateChatMessage } from '../lingo/pipeline';
 import { ack, retryIn, type Outcome } from '../outcome';
 import { helix, rateLimitResetSeconds } from '../twitch/helix';
-import { getLingoConfig } from '../user-stub';
 
 const KNOWN_BOTS = new Set(knownBots.map((name) => name.toLowerCase()));
 
@@ -74,13 +73,13 @@ export async function handleChatMessage(
   const bot = await channel.getBot();
   if (!bot.enabled) return ack;
 
-  const config = await getLingoConfig(env, broadcasterId);
-  if (!config?.language) return ack;
-  if (config.bots.some((name) => name.toLowerCase() === chatter)) return ack;
+  const settings = await channel.getLingualSettings();
+  if (!settings.language) return ack;
+  if (settings.ignoredChatters.includes(chatter)) return ack;
 
   if (now - sentAt > MAX_REPLY_AGE_MS) return ack;
 
-  const reply = await translateChatMessage(env, event, config.language);
+  const reply = await translateChatMessage(env, event, settings.language);
   if (!reply) return ack;
 
   return sendReply(env, event, reply, sentAt);

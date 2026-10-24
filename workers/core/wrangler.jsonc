@@ -1,14 +1,12 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "pvtch-api",
+  "name": "pvtch",
   "main": "./cloudflare/handler.ts",
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2025-04-01",
   "upload_source_maps": true,
 
-  // Declared here so every deploy claims www for this worker. It used to be
-  // attached in the dashboard to a separate worker, which kept serving an old
-  // build while deploys landed here.
+  // www is declared here so deploys keep it bound to this worker.
   "routes": [
     {
       "pattern": "www.pvtch.com",

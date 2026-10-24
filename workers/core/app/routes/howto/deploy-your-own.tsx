@@ -229,7 +229,7 @@ export default function DeployYourOwn() {
               no pages of its own.
             </li>
             <li>
-              <strong>pvtch-api</strong> (
+              <strong>pvtch</strong> (
               <code className="bg-muted px-1 rounded">workers/core</code>) is
               the website, widgets, OBS sources and Lingo.
             </li>
@@ -499,7 +499,7 @@ pnpm --filter @pvtch/twitch deploy`}
           <p>
             Your app will be available at{' '}
             <code className="bg-muted px-1 rounded">
-              https://pvtch-api.YOUR_SUBDOMAIN.workers.dev
+              https://pvtch.YOUR_SUBDOMAIN.workers.dev
             </code>
           </p>
 
@@ -650,7 +650,7 @@ ALLOWED_USERS=your_username,friend_username,another_user`}
             </h3>
             <p className="text-muted-foreground text-sm">
               An error about a missing script or Durable Object class when
-              deploying <code className="bg-muted px-1 rounded">pvtch-api</code>{' '}
+              deploying <code className="bg-muted px-1 rounded">pvtch</code>{' '}
               means storage isn't deployed yet, or is older than the app. Run{' '}
               <code className="bg-muted px-1 rounded">
                 pnpm --filter @pvtch/storage deploy

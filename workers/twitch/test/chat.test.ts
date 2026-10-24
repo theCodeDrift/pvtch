@@ -35,7 +35,10 @@ describe('handleChatMessage', () => {
     vi.setSystemTime(NOW);
     t = createTestEnv();
     t.channel(BROADCASTER_ID).enabled = true;
-    t.lingoConfigs.set(BROADCASTER_ID, { bots: [], language: 'english' });
+    t.channel(BROADCASTER_ID).lingual = {
+      language: 'english',
+      ignoredChatters: [],
+    };
     t.ai.mockResolvedValue(
       aiResponse({
         detected: 'Spanish',
@@ -114,10 +117,10 @@ describe('handleChatMessage', () => {
     });
 
     it("a user on the channel's ignore list", async () => {
-      t.lingoConfigs.set(BROADCASTER_ID, {
-        bots: ['Viewer'],
+      t.channel(BROADCASTER_ID).lingual = {
         language: 'english',
-      });
+        ignoredChatters: ['viewer'],
+      };
       await handleChatMessage(t.env, chatEvent(), NOW);
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -128,8 +131,11 @@ describe('handleChatMessage', () => {
       expect(t.ai).not.toHaveBeenCalled();
     });
 
-    it('a channel with no lingo config', async () => {
-      t.lingoConfigs.delete(BROADCASTER_ID);
+    it('a channel with no Lingual language set', async () => {
+      t.channel(BROADCASTER_ID).lingual = {
+        language: null,
+        ignoredChatters: [],
+      };
       await handleChatMessage(t.env, chatEvent(), NOW);
       expect(t.ai).not.toHaveBeenCalled();
     });

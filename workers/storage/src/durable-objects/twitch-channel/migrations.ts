@@ -38,4 +38,15 @@ export const twitchChannelMigrations: Migrations = {
       )
     `);
   },
+  2: (sql) => {
+    // Lingual's own settings. Deliberately separate from core's Lingo config.
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS lingual_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        language TEXT,
+        ignored_chatters TEXT NOT NULL DEFAULT '[]',
+        updated_at INTEGER NOT NULL
+      )
+    `);
+  },
 };

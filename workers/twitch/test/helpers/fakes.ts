@@ -11,6 +11,10 @@ export class FakeChannel {
   tier: 'standard' | 'moderator' = 'standard';
   slot: { ok: true } | { ok: false; retryAfterMs: number } = { ok: true };
   claimed = new Set<string>();
+  lingual: { language: string | null; ignoredChatters: string[] } = {
+    language: null,
+    ignoredChatters: [],
+  };
   subscriptions = new Map<
     string,
     { type: string; subscriptionId: string; status: string; updatedAt: number }
@@ -26,6 +30,9 @@ export class FakeChannel {
   disableBot() {
     this.enabled = false;
     return this.getBot();
+  }
+  getLingualSettings() {
+    return this.lingual;
   }
   getSubscription(type: string) {
     return this.subscriptions.get(type) ?? null;
@@ -75,7 +82,6 @@ export interface TestEnv {
   env: Env;
   channels: Map<string, FakeChannel>;
   channel: (id: string) => FakeChannel;
-  lingoConfigs: Map<string, { bots: string[]; language: string }>;
   send: ReturnType<typeof vi.fn>;
   ai: ReturnType<typeof vi.fn>;
   kv: FakeKV;
@@ -93,7 +99,6 @@ export function createTestEnv(): TestEnv {
     }
     return found;
   };
-  const lingoConfigs = new Map<string, { bots: string[]; language: string }>();
   const send = vi.fn(() => Promise.resolve());
   const ai = vi.fn();
   const kv = new FakeKV();
@@ -116,20 +121,9 @@ export function createTestEnv(): TestEnv {
       idFromName: (name: string) => name,
       get: (name: string) => channel(name.slice('twitch:'.length)),
     },
-    PVTCH_USER: {
-      idFromName: (name: string) => name,
-      get: (name: string) => ({
-        lingo: () =>
-          Promise.resolve({
-            getConfig: () =>
-              lingoConfigs.get(name.slice('twitch:'.length)) ?? undefined,
-            [Symbol.dispose]: () => {},
-          }),
-      }),
-    },
   } as unknown as Env;
 
-  return { env, channels, channel, lingoConfigs, send, ai, kv, accounts };
+  return { env, channels, channel, send, ai, kv, accounts };
 }
 
 /** Route-matching fetch mock. Unmatched requests fail the test loudly. */
