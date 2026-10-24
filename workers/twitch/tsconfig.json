@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true
+  },
+  // Storage and core sources are included for types only: the generated Env
+  // types TWITCH_CHANNEL via ../storage/src, and src/user-stub.ts types the
+  // PVTCH_USER binding with core's User class.
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "worker-configuration.d.ts",
+    "env.d.ts",
+    "../storage/src/**/*",
+    "../core/do/**/*"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,98 @@
+/**
+ * pvtch Twitch Worker
+ *
+ * EventSub webhook endpoint and the Lingual chat bot, on twitch.pvtch.com.
+ * Serves no user-facing pages: settings live on www (pvtch-api).
+ *
+ * Secrets (wrangler secret put):
+ *   TWITCH_SECRET           Twitch app client secret
+ *   TWITCH_EVENTSUB_SECRET  EventSub webhook signing secret (10-100 chars)
+ *
+ * Deploy order: pvtch-storage first (TWITCH_CHANNEL), and pvtch-api must
+ * already exist (PVTCH_USER). The twitch-events queues must exist.
+ */
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pvtch-twitch",
+  "main": "./src/index.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-04-01",
+  "upload_source_maps": true,
+  "workers_dev": false,
+
+  "routes": [
+    {
+      "pattern": "twitch.pvtch.com",
+      "custom_domain": true,
+    },
+  ],
+
+  "vars": {
+    "TWITCH_CLIENT_ID": "dinofhiya3gwjh5feq4di7oeurrxdp",
+    "TWITCH_BOT_USER_ID": "",
+    "TWITCH_APP_URL": "https://twitch.pvtch.com",
+    "PVTCH_APP_URL": "https://www.pvtch.com",
+    // Comma-separated Twitch logins allowed on /bot/* and /admin/*. Empty
+    // allows no one (unlike ALLOWED_USERS, where empty means open).
+    "ADMIN_USERS": "",
+  },
+
+  "observability": {
+    "enabled": true,
+  },
+
+  "kv_namespaces": [
+    {
+      "binding": "PVTCH_KV",
+      "id": "3588c48277284bfb8e673399f904b794",
+    },
+    {
+      "binding": "PVTCH_ACCOUNTS",
+      "id": "bc19b133947e4936b7ce4d808b27023e",
+    },
+  ],
+
+  "ai": {
+    "binding": "AI",
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TWITCH_CHANNEL",
+        "class_name": "TwitchChannel",
+        "script_name": "pvtch-storage",
+      },
+      {
+        // Read-only: the bot reads lingo().getConfig() from core's User DO.
+        "name": "PVTCH_USER",
+        "class_name": "User",
+        "script_name": "pvtch-api",
+      },
+    ],
+  },
+
+  /**
+   * MANUAL SETUP REQUIRED: create the queues before deploying.
+   *   wrangler queues create twitch-events
+   *   wrangler queues create twitch-events-dlq
+   */
+  "queues": {
+    "producers": [
+      {
+        "queue": "twitch-events",
+        "binding": "TWITCH_EVENTS",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "twitch-events",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+        "max_concurrency": 10,
+        "dead_letter_queue": "twitch-events-dlq",
+      },
+    ],
+  },
+}

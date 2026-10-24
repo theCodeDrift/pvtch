@@ -20,38 +20,38 @@
 
 ## 3. workers/twitch scaffolding
 
-- [ ] 3.1 Create `workers/twitch` (`@pvtch/twitch`, script `pvtch-twitch`) with a custom-domain route, bindings (`PVTCH_KV`, `PVTCH_ACCOUNTS`, `AI`, `TWITCH_CHANNEL` → `pvtch-storage`, `PVTCH_USER` → `pvtch-api`, the `TWITCH_EVENTS` producer and consumer, and the DLQ), and vars (`TWITCH_CLIENT_ID`, `TWITCH_BOT_USER_ID`, `ALLOWED_USERS`).
-- [ ] 3.2 Add a `typegen` script: `wrangler types -c wrangler.jsonc -c ../storage/wrangler.jsonc -c ../core/wrangler.jsonc`. Update tsconfig includes, and confirm the stubs are typed with no casts.
-- [ ] 3.3 Add a router: `POST /eventsub`, `GET /bot/authorize`, `GET /bot/callback`, `POST /admin/bootstrap`, and 404 for everything else.
-- [ ] 3.4 Write Zod schemas for the EventSub envelope, `channel.chat.message` v1 event (including fragments and `source_broadcaster_user_id`), the `user.authorization.revoke` event, and the queue messages. These are custom types because Twitch publishes none.
+- [x] 3.1 Create `workers/twitch` (`@pvtch/twitch`, script `pvtch-twitch`) with a custom-domain route, bindings (`PVTCH_KV`, `PVTCH_ACCOUNTS`, `AI`, `TWITCH_CHANNEL` → `pvtch-storage`, `PVTCH_USER` → `pvtch-api`, the `TWITCH_EVENTS` producer and consumer, and the DLQ), and vars (`TWITCH_CLIENT_ID`, `TWITCH_BOT_USER_ID`, `ALLOWED_USERS`).
+- [x] 3.2 Add a `typegen` script: `wrangler types -c wrangler.jsonc -c ../storage/wrangler.jsonc -c ../core/wrangler.jsonc`. Update tsconfig includes, and confirm the stubs are typed with no casts.
+- [x] 3.3 Add a router: `POST /eventsub`, `GET /bot/authorize`, `GET /bot/callback`, `POST /admin/bootstrap`, and 404 for everything else.
+- [x] 3.4 Write Zod schemas for the EventSub envelope, `channel.chat.message` v1 event (including fragments and `source_broadcaster_user_id`), the `user.authorization.revoke` event, and the queue messages. These are custom types because Twitch publishes none.
 
 ## 4. Ingest (`twitch-eventsub-ingest`)
 
-- [ ] 4.1 Implement HMAC verification with Web Crypto over the raw text body, with a constant-time compare.
-- [ ] 4.2 Add the 10-minute timestamp window.
-- [ ] 4.3 Answer the challenge inline (`text/plain`) and mark the subscription as `enabled`.
-- [ ] 4.4 Handle revocation inline (clear the record, and disable the bot when authorization was revoked or the user removed).
-- [ ] 4.5 Enqueue notifications, returning 204 once the enqueue succeeds and 500 if it fails.
-- [ ] 4.6 Write the consumer dispatcher, with `claimMessage` dedupe and logging plus ack for unknown kinds and types.
-- [ ] 4.7 Write tests: signature valid, invalid and re-serialized; stale timestamp; challenge; both revocation paths; queue failure; duplicate delivery.
+- [x] 4.1 Implement HMAC verification with Web Crypto over the raw text body, with a constant-time compare.
+- [x] 4.2 Add the 10-minute timestamp window.
+- [x] 4.3 Answer the challenge inline (`text/plain`) and mark the subscription as `enabled`.
+- [x] 4.4 Handle revocation inline (clear the record, and disable the bot when authorization was revoked or the user removed).
+- [x] 4.5 Enqueue notifications, returning 204 once the enqueue succeeds and 500 if it fails.
+- [x] 4.6 Write the consumer dispatcher, with `claimMessage` dedupe and logging plus ack for unknown kinds and types.
+- [x] 4.7 Write tests: signature valid, invalid and re-serialized; stale timestamp; challenge; both revocation paths; queue failure; duplicate delivery.
 
 ## 5. Chat bot (`twitch-chat-bot`)
 
-- [ ] 5.1 Implement the app-token helper (client credentials, KV cache with TTL, one refresh-and-retry on 401).
-- [ ] 5.2 Implement subscribe (handling 409 and 403), unsubscribe (treating 404 as success), and reconcile (`GET /eventsub/subscriptions?subscription_id=`).
-- [ ] 5.3 Add `POST /admin/bootstrap` to create the `user.authorization.revoke` subscription, gated to `ALLOWED_USERS`. Add the consumer handler for revoke events: call `disableBot()` and clear `scopes` on `twitch-data-{userId}`.
-- [ ] 5.4 Add the event filters: bot disabled, self, `knownBots` and the configured bots list, `!` commands, and the Shared Chat source. Before skipping a self event, set `setSendTier` from its `badges` (`moderator`, `lead_moderator` or `broadcaster` mean the moderator tier).
-- [ ] 5.5 Implement the send path: 60-second staleness, `acquireSendSlot` with retry delay, `POST /helix/chat/messages` with `reply_parent_message_id`, delay from `Ratelimit-Reset` on 429, backoff on 5xx, disable on 403, and log-and-ack when `is_sent: false`.
-- [ ] 5.6 Write tests for every scenario in `specs/twitch-chat-bot/spec.md`, using a mocked `fetch`.
+- [x] 5.1 Implement the app-token helper (client credentials, KV cache with TTL, one refresh-and-retry on 401).
+- [x] 5.2 Implement subscribe (handling 409 and 403), unsubscribe (treating 404 as success), and reconcile (`GET /eventsub/subscriptions?subscription_id=`).
+- [x] 5.3 Add `POST /admin/bootstrap` to create the `user.authorization.revoke` subscription, gated to `ALLOWED_USERS`. Add the consumer handler for revoke events: call `disableBot()` and clear `scopes` on `twitch-data-{userId}`.
+- [x] 5.4 Add the event filters: bot disabled, self, `knownBots` and the configured bots list, `!` commands, and the Shared Chat source. Before skipping a self event, set `setSendTier` from its `badges` (`moderator`, `lead_moderator` or `broadcaster` mean the moderator tier).
+- [x] 5.5 Implement the send path: 60-second staleness, `acquireSendSlot` with retry delay, `POST /helix/chat/messages` with `reply_parent_message_id`, delay from `Ratelimit-Reset` on 429, backoff on 5xx, disable on 403, and log-and-ack when `is_sent: false`.
+- [x] 5.6 Write tests for every scenario in `specs/twitch-chat-bot/spec.md`, using a mocked `fetch`.
 
 ## 6. Lingo bot pipeline (`lingo-bot`)
 
-- [ ] 6.1 Read config from `PVTCH_USER` (`lingo().getConfig()`). Add a comment on the core `User` DO noting that an external worker calls it.
-- [ ] 6.2 Write fragment-based preprocessing in `workers/twitch/src/lingo/preprocess.ts`.
-- [ ] 6.3 Create the bot's own detection module (initially a copy of core's `decide`, classifiers and thresholds, with no imports from `workers/core`).
-- [ ] 6.4 Copy the translator (prompt, schema, `isSameLanguage`) into `workers/twitch/src/lingo/translator.ts`.
-- [ ] 6.5 Format the reply: translation only, the username-only guard, and truncation to 500 characters.
-- [ ] 6.6 Write tests for every scenario in `specs/lingo-bot/spec.md`.
+- [x] 6.1 Read config from `PVTCH_USER` (`lingo().getConfig()`). Add a comment on the core `User` DO noting that an external worker calls it.
+- [x] 6.2 Write fragment-based preprocessing in `workers/twitch/src/lingo/preprocess.ts`.
+- [x] 6.3 Create the bot's own detection module (initially a copy of core's `decide`, classifiers and thresholds, with no imports from `workers/core`).
+- [x] 6.4 Copy the translator (prompt, schema, `isSameLanguage`) into `workers/twitch/src/lingo/translator.ts`.
+- [x] 6.5 Format the reply: translation only, the username-only guard, and truncation to 500 characters.
+- [x] 6.6 Write tests for every scenario in `specs/lingo-bot/spec.md`.
 
 ## 7. Bot consent (`bot-consent`, in workers/core)
 
@@ -60,7 +60,7 @@
 - [ ] 7.2a Verify whether a scope-free re-login narrows the Twitch authorization (design Open Questions). If it does, make `/auth/start` request the recorded scopes for returning users.
 - [ ] 7.3 Add a "Bots" section to the sidebar in `app/components/layout/app-layout.tsx`, with "Lingual" as its first entry. Register `bots/lingual`, `auth/grant` and `auth/grant/callback` in `app/routes.ts`.
 - [ ] 7.4 Build the `/bots/lingual` page: bot status and subscription status, and enable/disable (enable calls `enableBot()` when `channel:bot` is recorded, otherwise redirects through `/auth/grant`, and handles `enable=1` and `grant_error` on return), and a link to `/helpers/lingo` for language settings. Use shadcn `Card`, `Badge` and `Button` and Sonner toasts, gated by `ALLOWED_USERS`.
-- [ ] 7.5 Add `/bot/authorize` and `/bot/callback` on `pvtch-twitch`: session check with the `pvtch_token` cookie through the shared KV, `ALLOWED_USERS` gate, and a check that the authorizing user is `TWITCH_BOT_USER_ID`.
+- [x] 7.5 Add `/bot/authorize` and `/bot/callback` on `pvtch-twitch`: session check with the `pvtch_token` cookie through the shared KV, `ALLOWED_USERS` gate, and a check that the authorizing user is `TWITCH_BOT_USER_ID`.
 - [ ] 7.6 Add a regression test that login still requests no scopes.
 
 ## 8. Verify and roll out

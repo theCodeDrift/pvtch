@@ -16,6 +16,10 @@ import {
 /**
  * User - SQLite-backed Durable Object for per-user storage.
  * Keyed by "twitch:{userId}". Thin shell over plugins.
+ *
+ * EXTERNAL CALLER: pvtch-twitch binds this DO (`script_name: "pvtch-api"`)
+ * and calls `lingo().getConfig()` (workers/twitch/src/user-stub.ts). Renaming
+ * or changing either breaks the Lingual bot.
  */
 export class User extends DurableObject<Env> implements JobSchedulerHost {
   private _progress: Progress;
