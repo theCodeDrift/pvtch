@@ -11,6 +11,11 @@
     "TWITCH_REDIRECT_URI": "https://www.pvtch.com/auth/callback",
     "PVTCH_APP_URL": "https://www.pvtch.com",
     "ALLOWED_USERS": "",
+    // Twitch logins who can see Bots > Lingual during rollout. Empty shows it
+    // to no one (unlike ALLOWED_USERS, where empty means open).
+    "LINGUAL_PREVIEW_USERS": "theCodeDrift",
+    // The bot account Lingual replies as, shown on the settings page.
+    "LINGUAL_BOT_LOGIN": "botlingual",
   },
 
   "migrations": [

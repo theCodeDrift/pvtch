@@ -17,15 +17,24 @@ import { TwitchLogin } from '@/components/twitch-login';
 import { PvtchLogo } from '@/components/icons/pvtch-logo';
 import { cn } from '@/lib/utils';
 import { authMiddleware } from '@/middleware/auth';
-import { instanceAccessContext } from '@/context';
+import {
+  cloudflareEnvironmentContext,
+  instanceAccessContext,
+  userContext,
+} from '@/context';
+import { canUseLingual } from '@/lib/lingual';
 
 export const middleware: Route.MiddlewareFunction[] = [authMiddleware];
 
 export function loader({ context }: Route.LoaderArgs) {
   const access = context.get(instanceAccessContext);
+  const user = context.get(userContext);
+  const env = context.get(cloudflareEnvironmentContext);
   return data({
     isPrivate: access?.isPrivate ?? false,
     isAllowed: access?.isAllowed ?? true,
+    // Bots is in preview: only LINGUAL_PREVIEW_USERS see the section.
+    showBots: canUseLingual(env, user?.login),
   });
 }
 
@@ -43,6 +52,11 @@ const navigation = [
   {
     title: 'Helpers',
     items: [{ title: 'Lingo', href: '/helpers/lingo' }],
+  },
+  {
+    title: 'Bots',
+    preview: true,
+    items: [{ title: 'Lingual', href: '/bots/lingual' }],
   },
   {
     title: 'Support PVTCH',
@@ -214,14 +228,16 @@ export default function AppLayout() {
           )}
         >
           <nav className="h-full overflow-y-auto p-4">
-            {navigation.map((section) => (
-              <NavSection
-                key={section.title}
-                title={section.title}
-                items={section.items}
-                currentPath={location.pathname}
-              />
-            ))}
+            {navigation
+              .filter((section) => loaderData.showBots || !section.preview)
+              .map((section) => (
+                <NavSection
+                  key={section.title}
+                  title={section.title}
+                  items={section.items}
+                  currentPath={location.pathname}
+                />
+              ))}
           </nav>
         </aside>
 

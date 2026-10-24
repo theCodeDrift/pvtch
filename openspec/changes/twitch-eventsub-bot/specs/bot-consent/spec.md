@@ -2,16 +2,16 @@
 
 ### Requirement: Lingual enable uses the general grant flow
 
-Enabling Lingual SHALL require `channel:bot` in the user's recorded scopes. The `/bots/lingual` "Enable Lingual" action SHALL call `enableBot()` on the user's `TwitchChannel` when `channel:bot` is recorded; otherwise it SHALL redirect to `/auth/grant?scopes=channel:bot&return_to=/bots/lingual?enable=1`. When `/bots/lingual` loads with `enable=1` and `channel:bot` recorded, it SHALL call `enableBot()` and remove the parameter. Lingual SHALL NOT implement its own OAuth routes.
+Enabling Lingual SHALL require `channel:bot` in the user's recorded scopes. The `/bots/lingual` "Turn on Lingual" action SHALL call `enableBot()` on the user's `TwitchChannel` when `channel:bot` is recorded; otherwise it SHALL redirect to `/auth/grant?scopes=channel:bot&return_to=/bots/lingual?enable=1`. When `/bots/lingual` loads with `enable=1` and `channel:bot` recorded, it SHALL call `enableBot()` and remove the parameter. Lingual SHALL NOT implement its own OAuth routes.
 
 #### Scenario: First enable
 
-- **WHEN** a user without `channel:bot` clicks Enable Lingual
+- **WHEN** a user without `channel:bot` clicks Turn on Lingual
 - **THEN** they go through `/auth/grant`, return to `/bots/lingual?enable=1`, and the bot is enabled
 
 #### Scenario: Scope already granted
 
-- **WHEN** a user with `channel:bot` recorded clicks Enable Lingual
+- **WHEN** a user with `channel:bot` recorded clicks Turn on Lingual
 - **THEN** the bot is enabled with no Twitch redirect
 
 #### Scenario: Grant declined
@@ -21,31 +21,36 @@ Enabling Lingual SHALL require `channel:bot` in the user's recorded scopes. The 
 
 ### Requirement: Bot settings UI
 
-The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a new section titled "Bots" whose first entry is "Lingual", linking to a new page at `/bots/lingual` inside the shared app layout. That page SHALL show, for the logged-in user, whether the bot is enabled and the stored subscription status from `TwitchChannel`, and SHALL link to `/helpers/lingo` for language and ignore-list settings. It SHALL offer "Enable Lingual" when disabled and "Disable" when enabled. Disable SHALL call `disableBot()` (which enqueues the unsubscribe work) and SHALL NOT remove recorded scopes. During rollout the controls SHALL be visible only to users in `ALLOWED_USERS`.
+The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots" whose first entry is "Lingual", linking to `/bots/lingual` inside the shared app layout. During rollout, the section and the page's controls SHALL be visible only to users whose Twitch login is in `LINGUAL_PREVIEW_USERS` (a comma-separated `pvtch-api` var, case-insensitive; empty shows them to no one). The page SHALL show the bot's state and stored subscription status from `TwitchChannel` (Off, Connecting, Live, or the failed status), the target language from the user's Lingo config with a link to `/helpers/lingo`, and the bot's login (`LINGUAL_BOT_LOGIN`). It SHALL offer "Turn on Lingual" when disabled and "Turn off Lingual" when enabled. Turning off SHALL call `disableBot()` (which requests the unsubscribe) and SHALL NOT remove recorded scopes.
 
 #### Scenario: Enabled with pending subscription
 
-- **WHEN** the bot is enabled and status is `webhook_callback_verification_pending`
-- **THEN** the UI shows the bot as connecting
+- **WHEN** the bot is enabled and status is `webhook_callback_verification_pending` or not yet recorded
+- **THEN** the UI shows the bot as Connecting
 
 #### Scenario: Disable
 
-- **WHEN** the user clicks Disable
-- **THEN** the bot is disabled, an unsubscribe is enqueued, and a success toast is shown
+- **WHEN** the user clicks Turn off Lingual
+- **THEN** the bot is disabled and a success toast is shown
 
 #### Scenario: Rollout gate
 
-- **WHEN** a user not in `ALLOWED_USERS` views `/bots/lingual`
-- **THEN** no bot controls are shown
+- **WHEN** a logged-in user whose login is not in `LINGUAL_PREVIEW_USERS` views `/bots/lingual`
+- **THEN** no bot controls are shown and the sidebar has no Bots section
 
 #### Scenario: Sidebar entry
 
-- **WHEN** any page in the app layout renders
+- **WHEN** a user in `LINGUAL_PREVIEW_USERS` views any page in the app layout
 - **THEN** the sidebar shows a "Bots" section containing "Lingual" linking to `/bots/lingual`
+
+#### Scenario: No target language yet
+
+- **WHEN** the user has no Lingo target language configured
+- **THEN** the page tells them to set one in Lingo settings first
 
 ### Requirement: One-time bot account authorization
 
-`pvtch-twitch` SHALL provide `GET /bot/authorize` that redirects to Twitch authorize with `scope=user:bot user:read:chat user:write:chat` and `redirect_uri=https://twitch.pvtch.com/bot/callback`, and `GET /bot/callback` that exchanges the code and verifies the authorizing user's id equals `TWITCH_BOT_USER_ID`. This is separate from `/auth/grant` because the authorizing Twitch account is the bot, not the logged-in pvtch user. Both routes SHALL require a valid pvtch session (the `pvtch_token` cookie, set on `Domain=pvtch.com`, resolved through the shared `PVTCH_ACCOUNTS` KV) belonging to a user in `ALLOWED_USERS`. The resulting tokens SHALL NOT be stored.
+`pvtch-twitch` SHALL provide `GET /bot/authorize` that redirects to Twitch authorize with `scope=user:bot user:read:chat user:write:chat` and `redirect_uri=https://twitch.pvtch.com/bot/callback`, and `GET /bot/callback` that exchanges the code and verifies the authorizing user's id equals `TWITCH_BOT_USER_ID`. This is separate from `/auth/grant` because the authorizing Twitch account is the bot, not the logged-in pvtch user. Both routes SHALL require a valid pvtch session (the `pvtch_token` cookie, set on `Domain=pvtch.com`, resolved through the shared `PVTCH_ACCOUNTS` KV) belonging to a user in `ADMIN_USERS` (a comma-separated list of Twitch logins on `pvtch-twitch`; empty allows no one). The resulting tokens SHALL NOT be stored.
 
 #### Scenario: Bot account grants scopes
 
@@ -59,5 +64,5 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a new section titled "
 
 #### Scenario: Not an allowed user
 
-- **WHEN** a user not in `ALLOWED_USERS` requests `/bot/authorize`
+- **WHEN** a user not in `ADMIN_USERS`, or anyone while `ADMIN_USERS` is empty, requests `/bot/authorize`
 - **THEN** the response is HTTP 403

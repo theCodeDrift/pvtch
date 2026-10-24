@@ -28,13 +28,14 @@
   ],
 
   "vars": {
-    "TWITCH_CLIENT_ID": "dinofhiya3gwjh5feq4di7oeurrxdp",
-    "TWITCH_BOT_USER_ID": "",
+    "TWITCH_CLIENT_ID": "yrx2abngfobvh0zhgdwgwbr5yzbqop",
+    // The pvtch chat bot account (login: botlingual).
+    "TWITCH_BOT_USER_ID": "1591556954",
     "TWITCH_APP_URL": "https://twitch.pvtch.com",
     "PVTCH_APP_URL": "https://www.pvtch.com",
     // Comma-separated Twitch logins allowed on /bot/* and /admin/*. Empty
     // allows no one (unlike ALLOWED_USERS, where empty means open).
-    "ADMIN_USERS": "",
+    "ADMIN_USERS": "theCodeDrift",
   },
 
   "observability": {

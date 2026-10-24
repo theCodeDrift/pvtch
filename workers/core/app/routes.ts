@@ -16,6 +16,7 @@ export default [
     route('widgets/1s', './routes/widgets/1s.tsx'),
     route('widgets/todo', './routes/widgets/todo.tsx'),
     route('helpers/lingo', './routes/helpers/lingo.tsx'),
+    route('bots/lingual', './routes/bots.lingual.tsx'),
     route('howto/deploy-your-own', './routes/howto/deploy-your-own.tsx'),
     route('howto/board', './routes/howto/board.tsx'),
     route('board', './routes/board._index.tsx'),

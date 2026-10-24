@@ -53,7 +53,7 @@ When the consumer receives `{ kind: 'reconcile', broadcasterId }`: if the bot is
 
 ### Requirement: App-level authorization revoke subscription
 
-The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscription with condition `{ client_id: TWITCH_CLIENT_ID }`, created via `POST /admin/bootstrap` (restricted to `ALLOWED_USERS` sessions). On a `user.authorization.revoke` event the consumer SHALL call `disableBot()` on that user's `TwitchChannel` (which enqueues `unsubscribe`) and clear `scopes` on the user's `twitch-data-{userId}` record in `PVTCH_ACCOUNTS`.
+The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscription with condition `{ client_id: TWITCH_CLIENT_ID }`, created via `POST /admin/bootstrap` (restricted to sessions whose login is in `ADMIN_USERS`; empty allows no one). On a `user.authorization.revoke` event the consumer SHALL call `disableBot()` on that user's `TwitchChannel` (which enqueues `unsubscribe`) and clear `scopes` on the user's `twitch-data-{userId}` record in `PVTCH_ACCOUNTS`.
 
 #### Scenario: Streamer disconnects pvtch
 
