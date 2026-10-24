@@ -55,13 +55,13 @@
 
 ## 7. Bot consent (`bot-consent`, in workers/core)
 
-- [ ] 7.1 Add the `TWITCH_CHANNEL` binding (`script_name: "pvtch-storage"`) to `workers/core/wrangler.jsonc`. Update `cf-typegen` to multi-config.
-- [ ] 7.2 Add `GRANTABLE_SCOPES` (`channel:bot`) and the `scopes` field on `TwitchUserData`. Add the routes `auth/grant.tsx` (auth required, allowlist check, relative-only `return_to`, union with recorded scopes, HttpOnly state cookie) and `auth/grant.callback.tsx` (state check, code exchange, id match, record scopes, discard tokens, redirect with `granted` or `grant_error`). Test every scenario in `specs/auth/spec.md`.
+- [x] 7.1 Add the `TWITCH_CHANNEL` binding (`script_name: "pvtch-storage"`) to `workers/core/wrangler.jsonc`. Update `cf-typegen` to multi-config.
+- [x] 7.2 Add `GRANTABLE_SCOPES` (`channel:bot`) and the `scopes` field on `TwitchUserData`. Add the routes `auth/grant.tsx` (auth required, allowlist check, relative-only `return_to`, union with recorded scopes, HttpOnly state cookie) and `auth/grant.callback.tsx` (state check, code exchange, id match, record scopes, discard tokens, redirect with `granted` or `grant_error`). Test every scenario in `specs/auth/spec.md`.
 - [ ] 7.2a Verify whether a scope-free re-login narrows the Twitch authorization (design Open Questions). If it does, make `/auth/start` request the recorded scopes for returning users.
 - [ ] 7.3 Add a "Bots" section to the sidebar in `app/components/layout/app-layout.tsx`, with "Lingual" as its first entry. Register `bots/lingual`, `auth/grant` and `auth/grant/callback` in `app/routes.ts`.
 - [ ] 7.4 Build the `/bots/lingual` page: bot status and subscription status, and enable/disable (enable calls `enableBot()` when `channel:bot` is recorded, otherwise redirects through `/auth/grant`, and handles `enable=1` and `grant_error` on return), and a link to `/helpers/lingo` for language settings. Use shadcn `Card`, `Badge` and `Button` and Sonner toasts, gated by `ALLOWED_USERS`.
 - [x] 7.5 Add `/bot/authorize` and `/bot/callback` on `pvtch-twitch`: session check with the `pvtch_token` cookie through the shared KV, `ALLOWED_USERS` gate, and a check that the authorizing user is `TWITCH_BOT_USER_ID`.
-- [ ] 7.6 Add a regression test that login still requests no scopes.
+- [x] 7.6 Add a regression test that login still requests no scopes.
 
 ## 8. Verify and roll out
 

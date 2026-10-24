@@ -57,6 +57,8 @@ export default [
   route('auth/start', './routes/auth/start.tsx'),
   route('auth/callback', './routes/auth/callback.tsx'),
   route('auth/remove', './routes/auth/remove.tsx'),
+  route('auth/grant', './routes/auth/grant.tsx'),
+  route('auth/grant/callback', './routes/auth/grant.callback.tsx'),
 
   // API routes (loader/action only)
   route('lingo/translate/:token', './routes/lingo.translate.$token.tsx'),

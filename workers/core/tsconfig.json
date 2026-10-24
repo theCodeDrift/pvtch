@@ -29,7 +29,8 @@
     "do/**/*",
     "e2e/**/*",
     "worker-configuration.d.ts",
-    "env.d.ts"
+    "env.d.ts",
+    "../storage/src/**/*"
   ],
   "exclude": ["node_modules"]
 }

@@ -3,6 +3,9 @@ export type TwitchUserData = {
   login: string;
   display_name: string;
   token: string; // generated string unique to the user. "secret"
+  // Twitch scopes granted through /auth/grant (login itself grants none).
+  // Cleared when the user revokes pvtch on Twitch.
+  scopes?: string[];
 };
 
 export const twitchDataKeyPrefix = 'twitch-data-';

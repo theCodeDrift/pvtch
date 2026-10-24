@@ -5,6 +5,7 @@ import type {
 } from '@pvtch/shared/twitch-queue';
 
 import { migrate } from '../helpers/migrate';
+import type { StorageEnv } from '../storage-env';
 import { queryRows } from '../helpers/query-rows';
 import { JobScheduler, type ScheduledJob } from '../helpers/job-scheduler';
 import { twitchChannelMigrations } from './twitch-channel/migrations';
@@ -60,11 +61,11 @@ const REQUEST_TASKS = {
  * bucket. Makes no Twitch API calls: Twitch work is requested by sending
  * messages to the `twitch-events` queue, which pvtch-twitch consumes.
  */
-export class TwitchChannel extends DurableObject<Env> {
+export class TwitchChannel extends DurableObject<StorageEnv> {
   private sql: SqlStorage;
   private scheduler: JobScheduler;
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: StorageEnv) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     migrate(this.sql, twitchChannelMigrations, '_twitch_channel_version');

@@ -15,6 +15,8 @@ export default defineConfig({
   plugins: [
     cloudflare({
       viteEnvironment: { name: 'ssr' },
+      // Runs pvtch-storage alongside in dev so TWITCH_CHANNEL resolves.
+      auxiliaryWorkers: [{ configPath: '../storage/wrangler.jsonc' }],
     }),
     tailwindcss(),
     reactRouter(),

@@ -38,6 +38,12 @@
         "name": "PVTCH_USER",
         "class_name": "User",
       },
+      {
+        // Lives in pvtch-storage, which deploys first. See STYLEGUIDE-CODE.md.
+        "name": "TWITCH_CHANNEL",
+        "class_name": "TwitchChannel",
+        "script_name": "pvtch-storage",
+      },
     ],
   },
 

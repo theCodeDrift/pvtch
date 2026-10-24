@@ -2,12 +2,12 @@
 
 ### Requirement: Login remains scope-free
 
-The login flow (`/auth/start`) SHALL continue to request no OAuth scopes. Additional scopes SHALL be requested only through the general scope grant flow.
+The login flow (`/auth/start`) SHALL continue to request no OAuth scopes (the `scope` parameter is empty or absent). Additional scopes SHALL be requested only through the general scope grant flow.
 
 #### Scenario: Normal login
 
 - **WHEN** a user logs in
-- **THEN** the Twitch authorize URL contains no `scope` parameter
+- **THEN** the Twitch authorize URL requests no scopes
 
 ### Requirement: General scope grant flow
 
@@ -36,7 +36,7 @@ The login flow (`/auth/start`) SHALL continue to request no OAuth scopes. Additi
 #### Scenario: Not logged in
 
 - **WHEN** an anonymous user visits `/auth/grant`
-- **THEN** they are sent through login first and returned to the grant request
+- **THEN** they are redirected to `/auth/start` (login has no return-to; pages that link to the grant already require login)
 
 ### Requirement: Scope grant callback records granted scopes
 
@@ -54,7 +54,7 @@ The login flow (`/auth/start`) SHALL continue to request no OAuth scopes. Additi
 
 #### Scenario: State mismatch
 
-- **WHEN** the callback `state` does not match the cookie
+- **WHEN** the callback `state` does not match the cookie, or the cookie is missing or malformed
 - **THEN** the request is rejected with HTTP 400
 
 #### Scenario: User declines

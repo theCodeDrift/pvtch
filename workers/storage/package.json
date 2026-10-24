@@ -17,8 +17,8 @@
     "cf-typegen": "wrangler types",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --persist-to ../../.wrangler",
-    "lint": "eslint src/ test/",
-    "lint:fix": "eslint src/ test/ --fix",
+    "lint": "eslint src/ test/ checks/",
+    "lint:fix": "eslint src/ test/ checks/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm run cf-typegen && tsc --noEmit"

@@ -14,6 +14,11 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*", "test/**/*", "worker-configuration.d.ts"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "checks/**/*",
+    "worker-configuration.d.ts"
+  ],
   "exclude": ["node_modules"]
 }

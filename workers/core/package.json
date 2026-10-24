@@ -60,7 +60,7 @@
   "private": true,
   "scripts": {
     "build": "react-router build",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types -c wrangler.jsonc -c ../storage/wrangler.jsonc",
     "deploy": "pnpm run build && wrangler deploy",
     "dev": "react-router dev",
     "lint": "eslint app/ do/ cloudflare/ e2e/ test/",
