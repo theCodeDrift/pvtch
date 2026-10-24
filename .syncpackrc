@@ -1,0 +1,20 @@
+{
+  "versionGroups": [
+    {
+      "label": "Ignore workspace protocol dependencies",
+      "dependencies": ["**"],
+      "packages": ["**"],
+      "specifierTypes": ["workspace-protocol"],
+      "isIgnored": true
+    }
+  ],
+  "semverGroups": [
+    {
+      "label": "Ignore workspace protocol dependencies",
+      "dependencies": ["**"],
+      "packages": ["**"],
+      "specifierTypes": ["workspace-protocol"],
+      "isIgnored": true
+    }
+  ]
+}

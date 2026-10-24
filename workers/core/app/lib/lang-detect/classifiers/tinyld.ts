@@ -1,5 +1,5 @@
 import { detectAll, supportedLanguages } from 'tinyld/heavy';
-import { normalizeLanguage } from '@/lib/constants/languages';
+import { normalizeLanguage } from '@pvtch/shared/languages';
 import type { Classifier, ClassifierResult } from './types';
 
 const SUPPORTED_NAMES = new Set(

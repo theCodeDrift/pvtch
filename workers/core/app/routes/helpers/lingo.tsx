@@ -10,11 +10,11 @@ import {
 } from '@/context';
 import { normalizeKey } from '@/lib/normalize-key';
 import type { LingoPluginConfig } from '../../../do/plugins/lingo';
-import { isKnownLanguage, normalizeLanguage } from '@/lib/constants/languages';
+import { isKnownLanguage, normalizeLanguage } from '@pvtch/shared/languages';
 import {
   findSupportedTargetLanguage,
   isSupportedTargetLanguage,
-} from '@/lib/constants/supported-languages';
+} from '@pvtch/shared/supported-languages';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';

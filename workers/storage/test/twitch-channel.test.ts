@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   TwitchChannel,
   DEDUPE_WINDOW_MS,
+  RECONCILE_CRON,
 } from '../src/durable-objects/twitch-channel';
 import { createWorkerdSql } from './helpers/workerd-sql';
 
@@ -13,13 +14,26 @@ function drain(channel: TwitchChannel, count: number) {
 describe('TwitchChannel', () => {
   let sql: SqlStorage;
   let setAlarm: ReturnType<typeof vi.fn>;
+  let send: ReturnType<typeof vi.fn>;
   let channel: TwitchChannel;
 
   function construct(): TwitchChannel {
     const ctx = {
+      id: { name: 'twitch:123' },
       storage: { sql, setAlarm },
     } as unknown as DurableObjectState;
-    return new TwitchChannel(ctx, {} as Env);
+    const env = { TWITCH_EVENTS: { send } } as unknown as Env;
+    return new TwitchChannel(ctx, env);
+  }
+
+  function pendingJobs(task: string) {
+    return sql
+      .exec(
+        'SELECT id, cron FROM jobs WHERE task = ? AND status = ?',
+        task,
+        'pending'
+      )
+      .toArray();
   }
 
   beforeEach(() => {
@@ -27,6 +41,7 @@ describe('TwitchChannel', () => {
     vi.setSystemTime(new Date('2026-10-23T12:00:00Z'));
     sql = createWorkerdSql();
     setAlarm = vi.fn();
+    send = vi.fn(() => Promise.resolve());
     channel = construct();
   });
 
@@ -98,6 +113,98 @@ describe('TwitchChannel', () => {
       vi.advanceTimersByTime(5000);
 
       expect(channel.enableBot().enabledAt).toBe(Date.now());
+    });
+  });
+
+  describe('Twitch work requests', () => {
+    it('enable requests one subscribe and starts the reconcile cron', async () => {
+      channel.enableBot();
+
+      expect(pendingJobs('reconcile-subscription')).toEqual([
+        expect.objectContaining({ cron: RECONCILE_CRON }),
+      ]);
+      await channel.alarm();
+
+      expect(send).toHaveBeenCalledOnce();
+      expect(send).toHaveBeenCalledWith({
+        kind: 'subscribe',
+        broadcasterId: '123',
+      });
+    });
+
+    it('a repeat enable requests nothing', async () => {
+      channel.enableBot();
+      await channel.alarm();
+      send.mockClear();
+
+      channel.enableBot();
+      await channel.alarm();
+
+      expect(send).not.toHaveBeenCalled();
+      expect(pendingJobs('reconcile-subscription')).toHaveLength(1);
+    });
+
+    it('disable requests one unsubscribe and stops the reconcile cron', async () => {
+      channel.enableBot();
+      await channel.alarm();
+      send.mockClear();
+
+      channel.disableBot();
+      await channel.alarm();
+
+      expect(send).toHaveBeenCalledOnce();
+      expect(send).toHaveBeenCalledWith({
+        kind: 'unsubscribe',
+        broadcasterId: '123',
+      });
+      expect(pendingJobs('reconcile-subscription')).toHaveLength(0);
+    });
+
+    it('disabling a disabled bot requests nothing', async () => {
+      channel.disableBot();
+      await channel.alarm();
+
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('enable then disable before the alarm only unsubscribes', async () => {
+      channel.enableBot();
+      channel.disableBot();
+
+      await channel.alarm();
+
+      expect(send).toHaveBeenCalledOnce();
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'unsubscribe' })
+      );
+    });
+
+    it('retries a failed queue send with backoff', async () => {
+      send.mockRejectedValueOnce(new Error('queue unavailable'));
+      channel.enableBot();
+
+      await channel.alarm();
+      expect(pendingJobs('request-subscribe')).toHaveLength(1);
+
+      vi.advanceTimersByTime(31_000);
+      await channel.alarm();
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(pendingJobs('request-subscribe')).toHaveLength(0);
+    });
+
+    it('the reconcile cron requests a reconcile', async () => {
+      channel.enableBot();
+      await channel.alarm();
+      send.mockClear();
+
+      vi.setSystemTime(new Date('2026-10-23T18:00:00Z'));
+      await channel.alarm();
+
+      expect(send).toHaveBeenCalledWith({
+        kind: 'reconcile',
+        broadcasterId: '123',
+      });
     });
   });
 

@@ -1,0 +1,24 @@
+{
+  "name": "@pvtch/shared",
+  "version": "0.0.0",
+  "dependencies": {
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  },
+  "exports": {
+    "./known-bots": "./src/known-bots.ts",
+    "./languages": "./src/languages.ts",
+    "./supported-languages": "./src/supported-languages.ts",
+    "./twitch-queue": "./src/twitch-queue.ts"
+  },
+  "private": true,
+  "scripts": {
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module"
+}

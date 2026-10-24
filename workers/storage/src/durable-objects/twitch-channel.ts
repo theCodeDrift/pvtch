@@ -1,4 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
+import type {
+  TwitchWorkKind,
+  TwitchWorkMessage,
+} from '@pvtch/shared/twitch-queue';
 
 import { migrate } from '../helpers/migrate';
 import { queryRows } from '../helpers/query-rows';
@@ -37,11 +41,24 @@ export type SendSlot = { ok: true } | { ok: false; retryAfterMs: number };
 
 const PRUNE_DEDUPE_TASK = 'prune-dedupe';
 
+/** While the bot is enabled, ask the consumer to check the subscription. */
+export const RECONCILE_CRON = '0 */6 * * *';
+const RECONCILE_TASK = 'reconcile-subscription';
+
+/** One-shot jobs that put subscribe/unsubscribe work on the queue. Running
+ * them through the scheduler (due immediately) makes the request durable and
+ * retried with backoff if the queue send fails. */
+const REQUEST_TASKS = {
+  subscribe: 'request-subscribe',
+  unsubscribe: 'request-unsubscribe',
+} as const;
+
 /**
  * TwitchChannel - SQLite-backed Durable Object for per-broadcaster Twitch
  * state. Keyed by "twitch:{broadcasterId}". Holds bot enablement, the
  * EventSub subscription record, message-id dedupe, and the chat-send token
- * bucket. Makes no Twitch API calls.
+ * bucket. Makes no Twitch API calls: Twitch work is requested by sending
+ * messages to the `twitch-events` queue, which pvtch-twitch consumes.
  */
 export class TwitchChannel extends DurableObject<Env> {
   private sql: SqlStorage;
@@ -75,7 +92,10 @@ export class TwitchChannel extends DurableObject<Env> {
     };
   }
 
+  /** Enable the bot. On a disabled-to-enabled transition, requests a
+   * subscription and starts the reconcile cron. */
   enableBot(): BotState {
+    const wasEnabled = this.getBot().enabled;
     const now = Date.now();
     // Keep the original enabled_at when already enabled.
     this.sql.exec(
@@ -88,10 +108,17 @@ export class TwitchChannel extends DurableObject<Env> {
       now,
       now
     );
+    if (!wasEnabled) {
+      this.requestWork('subscribe');
+      this.scheduler.schedule(RECONCILE_CRON, RECONCILE_TASK, {});
+    }
     return this.getBot();
   }
 
+  /** Disable the bot. On an enabled-to-disabled transition, requests the
+   * subscription's removal and stops the reconcile cron. */
   disableBot(): BotState {
+    const wasEnabled = this.getBot().enabled;
     const now = Date.now();
     this.sql.exec(
       `INSERT INTO bot_state (id, enabled, enabled_at, updated_at)
@@ -99,6 +126,10 @@ export class TwitchChannel extends DurableObject<Env> {
        ON CONFLICT(id) DO UPDATE SET enabled = 0, updated_at = excluded.updated_at`,
       now
     );
+    if (wasEnabled) {
+      this.requestWork('unsubscribe');
+      this.scheduler.cancel(RECONCILE_TASK, RECONCILE_CRON);
+    }
     return this.getBot();
   }
 
@@ -236,17 +267,57 @@ export class TwitchChannel extends DurableObject<Env> {
     );
   }
 
-  private runJob(job: ScheduledJob): Promise<void> {
+  /** Queue subscribe or unsubscribe, superseding a pending opposite request
+   * so a quick enable/disable doesn't run both. */
+  private requestWork(kind: 'subscribe' | 'unsubscribe'): void {
+    const opposite = kind === 'subscribe' ? 'unsubscribe' : 'subscribe';
+    this.scheduler.cancel(REQUEST_TASKS[opposite]);
+    this.scheduler.schedule(
+      0,
+      REQUEST_TASKS[kind],
+      {},
+      { key: REQUEST_TASKS[kind] }
+    );
+  }
+
+  private async sendWork(kind: TwitchWorkKind): Promise<void> {
+    const message: TwitchWorkMessage = {
+      kind,
+      broadcasterId: this.broadcasterId(),
+    };
+    await this.env.TWITCH_EVENTS.send(message);
+  }
+
+  private broadcasterId(): string {
+    const name = this.ctx.id.name;
+    if (!name?.startsWith('twitch:')) {
+      throw new Error(`TwitchChannel has unexpected name: ${String(name)}`);
+    }
+    return name.slice('twitch:'.length);
+  }
+
+  private async runJob(job: ScheduledJob): Promise<void> {
     switch (job.task) {
       case PRUNE_DEDUPE_TASK: {
         this.pruneClaims();
+        break;
+      }
+      case REQUEST_TASKS.subscribe: {
+        await this.sendWork('subscribe');
+        break;
+      }
+      case REQUEST_TASKS.unsubscribe: {
+        await this.sendWork('unsubscribe');
+        break;
+      }
+      case RECONCILE_TASK: {
+        await this.sendWork('reconcile');
         break;
       }
       default: {
         console.warn(`Unknown scheduled task: ${job.task}`);
       }
     }
-    return Promise.resolve();
   }
 
   private pruneClaims(): void {

@@ -1,4 +1,4 @@
-import { normalizeLanguage } from '@/lib/constants/languages';
+import { normalizeLanguage } from '@pvtch/shared/languages';
 
 // Maps a canonical (lowercase) language name to the set of Unicode scripts the
 // language is normally written in. The set is intentionally permissive — for

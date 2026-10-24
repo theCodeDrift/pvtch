@@ -1,22 +1,22 @@
 ## 0. Prerequisites
 
-- [ ] 0.1 Confirm `twitch-storage-foundation` is implemented and deployed.
+- [x] 0.1 Confirm `twitch-storage-foundation` is implemented and deployed.
 - [ ] 0.2 Create the pvtch bot Twitch account and record its user id as `TWITCH_BOT_USER_ID`.
 - [ ] 0.3 Register the redirect URIs `https://www.pvtch.com/auth/grant/callback` and `https://twitch.pvtch.com/bot/callback` on the Twitch app.
 - [ ] 0.4 Create the Cloudflare queues `twitch-events` and `twitch-events-dlq`, and the custom domain `twitch.pvtch.com`.
 
 ## 1. packages/shared
 
-- [ ] 1.1 Add `packages/*` to `pnpm-workspace.yaml`. Create `packages/shared` (`@pvtch/shared`) with subpath exports `./known-bots`, `./languages` and `./supported-languages`, and no barrel.
-- [ ] 1.2 Move `known-bots.ts`, `constants/languages.ts` and `constants/supported-languages.ts` from `workers/core/app/lib`, then update every `workers/core` import.
-- [ ] 1.3 Run `pnpm --filter @pvtch/core typecheck`, `lint` and `test:unit` to confirm there is no behavior change.
+- [x] 1.1 Add `packages/*` to `pnpm-workspace.yaml`. Create `packages/shared` (`@pvtch/shared`) with subpath exports `./known-bots`, `./languages` and `./supported-languages`, and no barrel.
+- [x] 1.2 Move `known-bots.ts`, `constants/languages.ts` and `constants/supported-languages.ts` from `workers/core/app/lib`, then update every `workers/core` import.
+- [x] 1.3 Run `pnpm --filter @pvtch/core typecheck`, `lint` and `test:unit` to confirm there is no behavior change.
 
 ## 2. TwitchChannel additions (workers/storage)
 
-- [ ] 2.1 Add the `TWITCH_EVENTS` queue producer binding to `workers/storage/wrangler.jsonc`, and define the work-message type.
-- [ ] 2.2 Make `enableBot` / `disableBot` enqueue `subscribe` / `unsubscribe` on state transitions only, and register the `reconcile-subscription` cron (`0 */6 * * *`) or remove it with `scheduler.cancel('reconcile-subscription', '0 */6 * * *')`.
-- [ ] 2.3 Add a reconcile job handler that enqueues `{ kind: 'reconcile' }`.
-- [ ] 2.4 Write tests for each scenario in `specs/twitch-channel/spec.md`, using a mock queue.
+- [x] 2.1 Add the `TWITCH_EVENTS` queue producer binding to `workers/storage/wrangler.jsonc`, and define the work-message type.
+- [x] 2.2 Make `enableBot` / `disableBot` enqueue `subscribe` / `unsubscribe` on state transitions only, and register the `reconcile-subscription` cron (`0 */6 * * *`) or remove it with `scheduler.cancel('reconcile-subscription', '0 */6 * * *')`.
+- [x] 2.3 Add a reconcile job handler that enqueues `{ kind: 'reconcile' }`.
+- [x] 2.4 Write tests for each scenario in `specs/twitch-channel/spec.md`, using a mock queue.
 
 ## 3. workers/twitch scaffolding
 

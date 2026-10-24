@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normalizeLanguage } from '@/lib/constants/languages';
+import { normalizeLanguage } from '@pvtch/shared/languages';
 
 const MODEL = '@cf/qwen/qwen3-30b-a3b-fp8' as const;
 

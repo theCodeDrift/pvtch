@@ -30,6 +30,20 @@
   },
 
   /**
+   * Queue producer: TwitchChannel requests Twitch API work (subscribe,
+   * unsubscribe, reconcile) here; only pvtch-twitch's consumer calls Twitch.
+   * The queue must exist before this worker deploys.
+   */
+  "queues": {
+    "producers": [
+      {
+        "queue": "twitch-events",
+        "binding": "TWITCH_EVENTS",
+      },
+    ],
+  },
+
+  /**
    * Durable Object Migrations
    * https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
    *

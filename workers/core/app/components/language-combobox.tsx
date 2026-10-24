@@ -19,7 +19,7 @@ import {
   SUPPORTED_TARGET_LANGUAGES,
   findSupportedTargetLanguage,
   type SupportedTargetLanguage,
-} from '@/lib/constants/supported-languages';
+} from '@pvtch/shared/supported-languages';
 
 interface LanguageComboboxProps {
   id?: string;

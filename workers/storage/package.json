@@ -1,6 +1,7 @@
 {
   "name": "@pvtch/storage",
   "dependencies": {
+    "@pvtch/shared": "workspace:*",
     "cron-parser": "^5.5.0",
     "uuid": "^13.0.0"
   },

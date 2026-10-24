@@ -3,7 +3,7 @@ import {
   SUPPORTED_TARGET_LANGUAGES,
   findSupportedTargetLanguage,
   isSupportedTargetLanguage,
-} from '../../app/lib/constants/supported-languages';
+} from '../src/supported-languages';
 
 describe('SUPPORTED_TARGET_LANGUAGES', () => {
   it('contains entries from both tiers', () => {

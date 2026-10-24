@@ -51,6 +51,16 @@ importers:
         specifier: ^4.59.2
         version: 4.59.2
 
+  packages/shared:
+    dependencies:
+      zod:
+        specifier: ^4.2.1
+        version: 4.2.1
+    devDependencies:
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@24.9.1)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2)
+
   workers/core:
     dependencies:
       '@formatjs/intl-segmenter':
@@ -59,6 +69,9 @@ importers:
       '@nanostores/react':
         specifier: ^0.8.4
         version: 0.8.4(nanostores@0.11.4)(react@19.2.4)
+      '@pvtch/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -213,6 +226,9 @@ importers:
 
   workers/storage:
     dependencies:
+      '@pvtch/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       cron-parser:
         specifier: ^5.5.0
         version: 5.10.2

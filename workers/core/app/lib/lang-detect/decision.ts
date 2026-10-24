@@ -1,4 +1,4 @@
-import { normalizeLanguage } from '@/lib/constants/languages';
+import { normalizeLanguage } from '@pvtch/shared/languages';
 import { tinyldClassifier } from './classifiers/tinyld';
 import { francClassifier } from './classifiers/franc';
 import type { Classifier, ClassifierResult } from './classifiers/types';

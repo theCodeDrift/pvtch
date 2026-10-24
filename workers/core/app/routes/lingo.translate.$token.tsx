@@ -6,7 +6,7 @@ import { normalizeKey } from '@/lib/normalize-key';
 import { isSameLanguage, translate } from '@/lib/translator';
 import { type LingoConfig } from '@/lib/constants/lingo';
 import type { LingoPluginConfig } from '../../do/plugins/lingo';
-import { knownBots } from '@/lib/known-bots';
+import { knownBots } from '@pvtch/shared/known-bots';
 import { createLogger } from '@/lib/logger';
 import { decide } from '@/lib/lang-detect/decision';
 

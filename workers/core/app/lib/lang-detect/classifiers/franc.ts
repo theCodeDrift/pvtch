@@ -1,5 +1,5 @@
 import { francAll } from 'franc-min';
-import { normalizeLanguage } from '@/lib/constants/languages';
+import { normalizeLanguage } from '@pvtch/shared/languages';
 import type { Classifier, ClassifierResult } from './types';
 
 // franc-min does not export its supported-language set, so we mirror the

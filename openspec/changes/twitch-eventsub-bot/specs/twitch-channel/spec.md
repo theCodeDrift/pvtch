@@ -11,11 +11,11 @@
 
 ### Requirement: Enable and disable enqueue subscription work
 
-`enableBot()` SHALL, when transitioning from disabled to enabled, enqueue `{ kind: 'subscribe' }` and register the recurring `reconcile-subscription` job. `disableBot()` SHALL, when transitioning from enabled to disabled, enqueue `{ kind: 'unsubscribe' }` and cancel the `reconcile-subscription` job. Calls that do not change state SHALL enqueue nothing.
+`enableBot()` SHALL, when transitioning from disabled to enabled, schedule a one-shot `request-subscribe` job (due immediately, idempotency key `request-subscribe`) and register the recurring `reconcile-subscription` job. `disableBot()` SHALL, when transitioning from enabled to disabled, schedule a one-shot `request-unsubscribe` job and cancel the `reconcile-subscription` job. Each request SHALL cancel a pending request of the opposite kind. The request jobs SHALL send `{ kind: 'subscribe' | 'unsubscribe', broadcasterId }` to the queue, retrying with the scheduler's backoff if the send fails. Calls that do not change state SHALL request nothing.
 
 #### Scenario: Enable
 
-- **WHEN** `enableBot()` is called on a disabled channel
+- **WHEN** `enableBot()` is called on a disabled channel and the alarm runs
 - **THEN** one `subscribe` message is enqueued and the reconcile job is scheduled
 
 #### Scenario: Repeat enable
@@ -25,8 +25,18 @@
 
 #### Scenario: Disable
 
-- **WHEN** `disableBot()` is called on an enabled channel
+- **WHEN** `disableBot()` is called on an enabled channel and the alarm runs
 - **THEN** one `unsubscribe` message is enqueued and the reconcile job is removed
+
+#### Scenario: Enable then disable before the alarm
+
+- **WHEN** `enableBot()` then `disableBot()` are called before the alarm runs
+- **THEN** only `unsubscribe` is enqueued
+
+#### Scenario: Queue send fails
+
+- **WHEN** the queue send for a request fails
+- **THEN** the request job retries with backoff until the send succeeds
 
 ### Requirement: Recurring subscription reconcile
 
