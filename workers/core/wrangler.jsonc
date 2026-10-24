@@ -18,6 +18,20 @@
     "LINGUAL_BOT_LOGIN": "botlingual",
   },
 
+  /**
+   * Account-level Secrets Store. TWITCH_SECRET is the shared Twitch app's
+   * client secret, used by pvtch-api and pvtch-twitch. Read it with
+   * readSecret() from @pvtch/shared/secrets: a store binding is an object
+   * with an async get(), not a string.
+   */
+  "secrets_store_secrets": [
+    {
+      "binding": "TWITCH_SECRET",
+      "store_id": "a50693a341154908beed43817b887121",
+      "secret_name": "TWITCH_SECRET",
+    },
+  ],
+
   "migrations": [
     {
       "tag": "v1",

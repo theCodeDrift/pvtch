@@ -10,6 +10,7 @@
   "exports": {
     "./known-bots": "./src/known-bots.ts",
     "./languages": "./src/languages.ts",
+    "./secrets": "./src/secrets.ts",
     "./supported-languages": "./src/supported-languages.ts",
     "./twitch-queue": "./src/twitch-queue.ts"
   },

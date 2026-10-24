@@ -3,9 +3,6 @@
 
 declare global {
   interface Env {
-    // Secrets (set via wrangler secret)
-    TWITCH_SECRET?: string;
-
     // Development variables (set in .dev.vars or programmatically)
     DEVELOPMENT?: string;
     DISABLE_CACHE?: boolean;

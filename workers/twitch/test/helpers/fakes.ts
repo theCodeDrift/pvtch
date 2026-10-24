@@ -101,8 +101,9 @@ export function createTestEnv(): TestEnv {
 
   const env = {
     TWITCH_CLIENT_ID: 'client-id',
-    TWITCH_SECRET: 'client-secret',
-    TWITCH_EVENTSUB_SECRET: EVENTSUB_SECRET,
+    // Shaped like a Secrets Store binding, as in production.
+    TWITCH_SECRET: { get: () => Promise.resolve('client-secret') },
+    TWITCH_EVENTSUB_SECRET: { get: () => Promise.resolve(EVENTSUB_SECRET) },
     TWITCH_BOT_USER_ID: BOT_ID,
     TWITCH_APP_URL: 'https://twitch.example.com',
     PVTCH_APP_URL: 'https://www.example.com',

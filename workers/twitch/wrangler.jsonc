@@ -4,8 +4,8 @@
  * EventSub webhook endpoint and the Lingual chat bot, on twitch.pvtch.com.
  * Serves no user-facing pages: settings live on www (pvtch-api).
  *
- * Secrets (wrangler secret put):
- *   TWITCH_SECRET           Twitch app client secret
+ * Secrets come from the account Secrets Store (secrets_store_secrets below):
+ *   TWITCH_SECRET           Twitch app client secret (shared with pvtch-api)
  *   TWITCH_EVENTSUB_SECRET  EventSub webhook signing secret (10-100 chars)
  *
  * Deploy order: pvtch-storage first (TWITCH_CHANNEL), and pvtch-api must
@@ -37,6 +37,26 @@
     // allows no one (unlike ALLOWED_USERS, where empty means open).
     "ADMIN_USERS": "theCodeDrift",
   },
+
+  /**
+   * Account-level Secrets Store. TWITCH_SECRET is the shared Twitch app's
+   * client secret, used by pvtch-api and pvtch-twitch. Read it with
+   * readSecret() from @pvtch/shared/secrets: a store binding is an object
+   * with an async get(), not a string.
+   */
+  "secrets_store_secrets": [
+    {
+      "binding": "TWITCH_SECRET",
+      "store_id": "a50693a341154908beed43817b887121",
+      "secret_name": "TWITCH_SECRET",
+    },
+    {
+      // EventSub webhook signing secret (10-100 characters).
+      "binding": "TWITCH_EVENTSUB_SECRET",
+      "store_id": "a50693a341154908beed43817b887121",
+      "secret_name": "TWITCH_EVENTSUB_SECRET",
+    },
+  ],
 
   "observability": {
     "enabled": true,

@@ -21,16 +21,16 @@ twitch-events consumer ──▶ dedupe (TwitchChannel.claimMessage)
 
 ## Configuration
 
-| Name                     | Kind   | Value                                                                                                               |
-| ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------- |
-| `TWITCH_CLIENT_ID`       | var    | The pvtch Twitch app. Must be the same app as `pvtch-api`, because broadcasters grant `channel:bot` to that client. |
-| `TWITCH_BOT_USER_ID`     | var    | The bot account's Twitch user id (`botlingual`: `1591556954`)                                                       |
-| `TWITCH_APP_URL`         | var    | `https://twitch.pvtch.com` (EventSub callback and `/bot/callback` base)                                             |
-| `ADMIN_USERS`            | var    | Twitch logins allowed on `/bot/*` and `/admin/*`. Empty allows no one.                                              |
-| `TWITCH_SECRET`          | secret | The Twitch app's client secret                                                                                      |
-| `TWITCH_EVENTSUB_SECRET` | secret | EventSub signing secret, 10–100 characters                                                                          |
+| Name                     | Kind          | Value                                                                                                                                                         |
+| ------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TWITCH_CLIENT_ID`       | var           | The pvtch Twitch app. Must be the same app as `pvtch-api`, because broadcasters grant `channel:bot` to that client.                                           |
+| `TWITCH_BOT_USER_ID`     | var           | The bot account's Twitch user id (`botlingual`: `1591556954`)                                                                                                 |
+| `TWITCH_APP_URL`         | var           | `https://twitch.pvtch.com` (EventSub callback and `/bot/callback` base)                                                                                       |
+| `ADMIN_USERS`            | var           | Twitch logins allowed on `/bot/*` and `/admin/*`. Empty allows no one.                                                                                        |
+| `TWITCH_SECRET`          | Secrets Store | The Twitch app's client secret, shared with `pvtch-api` (store `a50693a341154908beed43817b887121`). Read it with `readSecret()` from `@pvtch/shared/secrets`. |
+| `TWITCH_EVENTSUB_SECRET` | Secrets Store | EventSub signing secret, 10–100 characters                                                                                                                    |
 
-For local development, copy `.dev.vars.example` to `.dev.vars`.
+For local development, follow `.dev.vars.example` to put both secrets in Wrangler's local secrets store.
 
 ## First-time setup
 
@@ -39,7 +39,7 @@ For local development, copy `.dev.vars.example` to `.dev.vars`.
    - `https://www.pvtch.com/auth/grant/callback` (scope grants)
    - `https://twitch.pvtch.com/bot/callback` (bot account)
 2. Create the queues: `wrangler queues create twitch-events` and `wrangler queues create twitch-events-dlq`.
-3. Set the secrets with `wrangler secret put TWITCH_SECRET` and `wrangler secret put TWITCH_EVENTSUB_SECRET`.
+3. Put the Twitch app's client secret in the account's Secrets Store as `TWITCH_SECRET` (both workers bind it), and add `TWITCH_EVENTSUB_SECRET` (10–100 random characters) to the same store.
 4. Deploy (see below). The custom domain `twitch.pvtch.com` comes from `routes` in `wrangler.jsonc`.
 5. As a user in `ADMIN_USERS`, log into Twitch **as the bot account** and open `https://twitch.pvtch.com/bot/authorize`. This grants the bot `user:bot user:read:chat user:write:chat`.
 6. Open `https://twitch.pvtch.com/admin/bootstrap` and press the button. This creates the app-wide `user.authorization.revoke` subscription.
@@ -55,10 +55,10 @@ For local development, copy `.dev.vars.example` to `.dev.vars`.
 pnpm --filter @pvtch/twitch dev   # runs storage alongside
 twitch event trigger channel.chat.message \
   --forward-address http://localhost:8787/eventsub \
-  --secret "$TWITCH_EVENTSUB_SECRET"
+  --secret "$YOUR_LOCAL_EVENTSUB_SECRET"
 twitch event verify-subscription channel.chat.message \
   --forward-address http://localhost:8787/eventsub \
-  --secret "$TWITCH_EVENTSUB_SECRET"
+  --secret "$YOUR_LOCAL_EVENTSUB_SECRET"
 ```
 
 `pnpm --filter @pvtch/twitch test` covers the webhook, consumer, subscriptions, send path and translation with mocked `fetch` and in-memory fakes.

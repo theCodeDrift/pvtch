@@ -7,6 +7,7 @@ import {
   type TwitchUserData,
 } from '@/lib/twitch-data';
 import { createToken } from '@/lib/create-token';
+import { readSecret } from '@pvtch/shared/secrets';
 
 type TwitchTokenResponse = {
   access_token: string;
@@ -58,7 +59,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const tokenRequestBody = new URLSearchParams();
   tokenRequestBody.set('client_id', env.TWITCH_CLIENT_ID || '');
-  tokenRequestBody.set('client_secret', env.TWITCH_SECRET || '');
+  tokenRequestBody.set('client_secret', await readSecret(env.TWITCH_SECRET));
   tokenRequestBody.set('code', code);
   tokenRequestBody.set('grant_type', 'authorization_code');
   tokenRequestBody.set(

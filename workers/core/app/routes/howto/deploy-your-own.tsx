@@ -413,10 +413,33 @@ wrangler queues create twitch-events-dlq`}
 }`}
           </CodeBlock>
 
-          <p>Set your Twitch secret as a secure secret (not in code):</p>
-          <CodeBlock copyable>{`wrangler secret put TWITCH_SECRET`}</CodeBlock>
+          <p>
+            Store your Twitch client secret in your Cloudflare account&apos;s
+            Secrets Store (it&apos;s shared by every PVTCH worker), then put
+            your store&apos;s id in the{' '}
+            <code className="bg-muted px-1 rounded">secrets_store_secrets</code>{' '}
+            entries of{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/core/wrangler.jsonc
+            </code>{' '}
+            (and{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/twitch/wrangler.jsonc
+            </code>{' '}
+            if you run the chat bot):
+          </p>
+          <CodeBlock copyable>
+            {`wrangler secrets-store store list --remote
+wrangler secrets-store secret create YOUR_STORE_ID \\
+  --name TWITCH_SECRET --scopes workers --remote`}
+          </CodeBlock>
           <p className="text-sm">
-            You'll be prompted to enter the secret value securely.
+            You&apos;ll be prompted to enter the secret value securely. If you
+            have no store yet, create one with{' '}
+            <code className="bg-muted px-1 rounded">
+              wrangler secrets-store store create pvtch --remote
+            </code>
+            .
           </p>
         </Step>
 
@@ -428,10 +451,19 @@ wrangler queues create twitch-events-dlq`}
           </p>
           <CodeBlock>
             {`# Copy from .dev.vars.example
-TWITCH_SECRET=your_twitch_client_secret
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_REDIRECT_URI=http://localhost:5173/auth/callback
 PVTCH_APP_URL=http://localhost:5173`}
+          </CodeBlock>
+
+          <p>
+            Wrangler emulates the Secrets Store locally, so add the Twitch
+            secret there once:
+          </p>
+          <CodeBlock copyable>
+            {`cd workers/core
+wrangler secrets-store secret create YOUR_STORE_ID \\
+  --name TWITCH_SECRET --scopes workers`}
           </CodeBlock>
 
           <p>Then start the dev server:</p>
@@ -533,12 +565,19 @@ pnpm --filter @pvtch/twitch deploy`}
               </code>{' '}
               (core). Both are empty-means-nobody lists.
             </li>
-            <li>Set the worker&apos;s secrets:</li>
+            <li>
+              Add the EventSub signing secret to the same Secrets Store, and set
+              your store&apos;s id in{' '}
+              <code className="bg-muted px-1 rounded">
+                workers/twitch/wrangler.jsonc
+              </code>
+              :
+            </li>
           </ol>
           <CodeBlock copyable>
-            {`cd workers/twitch
-wrangler secret put TWITCH_SECRET
-wrangler secret put TWITCH_EVENTSUB_SECRET  # any random 10-100 characters`}
+            {`wrangler secrets-store secret create YOUR_STORE_ID \\
+  --name TWITCH_EVENTSUB_SECRET --scopes workers --remote
+# any random 10-100 characters`}
           </CodeBlock>
           <p>
             After deploying, log into Twitch <strong>as the bot account</strong>{' '}

@@ -1,3 +1,4 @@
+import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 
 import { getSessionUser, isAdmin, readCookie } from '../session';
@@ -75,7 +76,7 @@ export async function botCallback(
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: env.TWITCH_CLIENT_ID,
-      client_secret: env.TWITCH_SECRET,
+      client_secret: await readSecret(env.TWITCH_SECRET),
       code,
       grant_type: 'authorization_code',
       redirect_uri: redirectUri(env),

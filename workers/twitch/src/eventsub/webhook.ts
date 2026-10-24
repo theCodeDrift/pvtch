@@ -1,3 +1,4 @@
+import { readSecret } from '@pvtch/shared/secrets';
 import type { TwitchEventMessage } from '@pvtch/shared/twitch-queue';
 import { z } from 'zod';
 
@@ -36,7 +37,7 @@ export async function handleEventSub(
 
   const body = await request.text();
   const valid = await verifySignature(
-    env.TWITCH_EVENTSUB_SECRET,
+    await readSecret(env.TWITCH_EVENTSUB_SECRET),
     messageId,
     timestamp,
     body,

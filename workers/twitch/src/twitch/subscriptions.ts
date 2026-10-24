@@ -1,3 +1,4 @@
+import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 
 import { channelStub } from '../channel';
@@ -74,7 +75,7 @@ export async function subscribe(
       transport: {
         method: 'webhook',
         callback: callbackUrl(env),
-        secret: env.TWITCH_EVENTSUB_SECRET,
+        secret: await readSecret(env.TWITCH_EVENTSUB_SECRET),
       },
     },
   });
@@ -188,7 +189,7 @@ export async function bootstrapRevokeSubscription(
       transport: {
         method: 'webhook',
         callback: callbackUrl(env),
-        secret: env.TWITCH_EVENTSUB_SECRET,
+        secret: await readSecret(env.TWITCH_EVENTSUB_SECRET),
       },
     },
   });

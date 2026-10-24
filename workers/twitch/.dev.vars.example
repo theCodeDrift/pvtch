@@ -1,5 +1,6 @@
-# Copy to .dev.vars for local development. Production values are set with
-# `wrangler secret put <NAME>`.
-TWITCH_SECRET=your_twitch_client_secret
-# 10-100 characters; Twitch signs EventSub webhooks with it.
-TWITCH_EVENTSUB_SECRET=local_eventsub_secret_for_twitch_cli
+# Both secrets are Secrets Store bindings (see wrangler.jsonc), not dev vars.
+# Create them once in Wrangler's local secrets store:
+#   wrangler secrets-store secret create a50693a341154908beed43817b887121 \
+#     --name TWITCH_SECRET --scopes workers
+#   wrangler secrets-store secret create a50693a341154908beed43817b887121 \
+#     --name TWITCH_EVENTSUB_SECRET --scopes workers

@@ -1,3 +1,4 @@
+import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 
 const HELIX_BASE = 'https://api.twitch.tv/helix';
@@ -31,7 +32,7 @@ export async function getAppToken(
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: env.TWITCH_CLIENT_ID,
-      client_secret: env.TWITCH_SECRET,
+      client_secret: await readSecret(env.TWITCH_SECRET),
       grant_type: 'client_credentials',
     }).toString(),
   });

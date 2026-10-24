@@ -35,7 +35,7 @@ function setup(user: TwitchUserData = USER) {
   accounts.store.set(`twitch-data-${user.id}`, JSON.stringify(user));
   const env = {
     TWITCH_CLIENT_ID: 'client-id',
-    TWITCH_SECRET: 'secret',
+    TWITCH_SECRET: { get: () => Promise.resolve('secret') },
     PVTCH_APP_URL: 'https://www.example.com',
     TWITCH_REDIRECT_URI: 'https://www.example.com/auth/callback',
     PVTCH_ACCOUNTS: accounts,
