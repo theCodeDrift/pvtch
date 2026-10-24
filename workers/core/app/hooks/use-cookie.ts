@@ -1,6 +1,18 @@
 import { useCallback, useState } from 'react';
 import Cookies from 'js-cookie';
 
+/**
+ * Login sets pvtch cookies on the parent domain (`Domain=pvtch.com`) so
+ * twitch.pvtch.com can read them. A plain remove only clears a host-only
+ * cookie, so also remove the parent-domain copy. Returns undefined for
+ * localhost and IP addresses, where cookies are host-only.
+ */
+function parentDomain(hostname: string): string | undefined {
+  const labels = hostname.split('.');
+  if (labels.length < 2 || /^[\d.]+$/.test(hostname)) return undefined;
+  return labels.slice(-2).join('.');
+}
+
 type CookiesReturn = [
   string | undefined,
   (newValue: string, options?: Cookies.CookieAttributes) => void,
@@ -31,6 +43,11 @@ export default function useCookie(cookieName: string): CookiesReturn {
 
   const deleteCookie = useCallback(() => {
     Cookies.remove(cookieName);
+    const domain =
+      globalThis.window === undefined
+        ? undefined
+        : parentDomain(globalThis.window.location.hostname);
+    if (domain) Cookies.remove(cookieName, { domain });
     setValue(undefined);
   }, [cookieName]);
 
