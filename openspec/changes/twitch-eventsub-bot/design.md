@@ -153,11 +153,13 @@ The bot-account authorization is the one exception, on `twitch.pvtch.com/bot/*`.
 
 ## Open Questions
 
-- What period should the reconcile cron use? Proposed: every 6 hours, plus once immediately after enable.
-
 - Does re-authorizing with fewer scopes (a scope-free `/auth/start` login after a `channel:bot` grant) remove `channel:bot` from the user's Twitch authorization? To test: grant `channel:bot` on a test account, log in again, then check whether a `channel.chat.message` subscription can still be created.
 
 ## Resolved Questions
+
+- **One Twitch app:** `pvtch-api` and `pvtch-twitch` share one client ID (`yrx2abngfobvh0zhgdwgwbr5yzbqop`). Twitch ties a broadcaster's `channel:bot` grant to the client they approved, and checks it against the app token that creates the subscription, so the grant flow on www and the bot must use the same app. This replaced pvtch's original app; its redirect URIs (`/auth/callback`, `/auth/grant/callback`, `/bot/callback`) and core's `TWITCH_SECRET` move with it.
+- **Reconcile period:** every 6 hours (`0 */6 * * *`), plus the subscribe request made when the bot is enabled.
+- **Admin and rollout gates:** `ADMIN_USERS` (pvtch-twitch) and `LINGUAL_PREVIEW_USERS` (pvtch-api), both fail-closed, starting with `theCodeDrift`.
 
 - **Mod tier (yes):** the bot receives its own messages as `channel.chat.message` events, and their `badges` show whether it is a moderator. The consumer reads them, sets `setSendTier` accordingly, and then skips the event. No bot user token or extra scope is needed. While the bot is unmodded it stays on the standard tier.
 - **UI placement:** a new "Bots" section in the dashboard sidebar. Its first entry is "Lingual" at `/bots/lingual`. Scope consent goes through the general `/auth/grant` flow rather than routes specific to Lingual. Language and ignore-list settings stay on `/helpers/lingo`.

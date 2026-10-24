@@ -233,6 +233,13 @@ export default function DeployYourOwn() {
               <code className="bg-muted px-1 rounded">workers/core</code>) is
               the website, widgets, OBS sources and Lingo.
             </li>
+            <li>
+              <strong>pvtch-twitch</strong> (
+              <code className="bg-muted px-1 rounded">workers/twitch</code>,
+              optional) runs Lingual, the chat bot that translates messages in
+              your Twitch chat. It receives Twitch EventSub webhooks on its own
+              domain.
+            </li>
           </ul>
           <p>
             <strong>Why separate workers?</strong> A Durable Object lives in
@@ -240,8 +247,8 @@ export default function DeployYourOwn() {
             binding that names the worker it lives in (
             <code className="bg-muted px-1 rounded">script_name</code>). Keeping
             shared Durable Objects in a small worker of their own means
-            redeploying the website never touches them, and new workers, like
-            the upcoming chat bot, can share the same state.
+            redeploying the website never touches them, and other workers, like
+            the chat bot, share the same state.
           </p>
           <p>
             <strong>Why storage deploys first:</strong> Cloudflare refuses to
@@ -315,6 +322,12 @@ pnpm install`}
                 </li>
                 <li>
                   <code className="bg-muted px-1 rounded text-sm">
+                    https://your-worker.your-subdomain.workers.dev/auth/grant/callback
+                  </code>{' '}
+                  (extra Twitch permissions, such as the chat bot&apos;s)
+                </li>
+                <li>
+                  <code className="bg-muted px-1 rounded text-sm">
                     http://localhost:5173/auth/callback
                   </code>{' '}
                   (for local dev)
@@ -371,6 +384,16 @@ wrangler kv namespace create PVTCH_ACCOUNTS`}
     "id": "YOUR_ACCOUNTS_ID_HERE"
   }
 ]`}
+          </CodeBlock>
+
+          <p>
+            Create the chat bot&apos;s queues. The storage worker sends to{' '}
+            <code className="bg-muted px-1 rounded">twitch-events</code>, so it
+            won&apos;t deploy without it, even if you never run the bot:
+          </p>
+          <CodeBlock copyable>
+            {`wrangler queues create twitch-events
+wrangler queues create twitch-events-dlq`}
           </CodeBlock>
         </Step>
 
@@ -431,7 +454,9 @@ pnpm run dev`}
           </p>
           <CodeBlock copyable>
             {`pnpm --filter @pvtch/storage deploy
-pnpm --filter @pvtch/core deploy`}
+pnpm --filter @pvtch/core deploy
+# optional: the Lingual chat bot (see below)
+pnpm --filter @pvtch/twitch deploy`}
           </CodeBlock>
           <p className="text-sm">
             Each deploy runs typechecking, linting and tests first. Later
@@ -466,6 +491,75 @@ pnpm --filter @pvtch/core deploy`}
             <strong>Custom domain (optional):</strong> You can add a custom
             domain in the Cloudflare dashboard under Workers &rarr; your worker
             &rarr; Settings &rarr; Domains & Routes.
+          </p>
+        </Step>
+
+        <Step number={7} title="Lingual Chat Bot (Optional)">
+          <p>
+            Lingual chats as a Twitch account of its own and replies to messages
+            that aren&apos;t in the streamer&apos;s language. It runs in the{' '}
+            <code className="bg-muted px-1 rounded">pvtch-twitch</code> worker
+            on its own domain, because Twitch delivers chat to it over webhooks.
+          </p>
+          <ol className="list-decimal list-inside space-y-2 ml-2">
+            <li>
+              Create a Twitch account for the bot and note its user id. Put it
+              in{' '}
+              <code className="bg-muted px-1 rounded">TWITCH_BOT_USER_ID</code>{' '}
+              in{' '}
+              <code className="bg-muted px-1 rounded">
+                workers/twitch/wrangler.jsonc
+              </code>
+              , and use the same{' '}
+              <code className="bg-muted px-1 rounded">TWITCH_CLIENT_ID</code> as
+              the app. Streamers grant the bot permission to that app.
+            </li>
+            <li>
+              Pick a domain for the worker (the{' '}
+              <code className="bg-muted px-1 rounded">routes</code> entry and{' '}
+              <code className="bg-muted px-1 rounded">TWITCH_APP_URL</code>) and
+              add{' '}
+              <code className="bg-muted px-1 rounded">
+                https://YOUR_BOT_DOMAIN/bot/callback
+              </code>{' '}
+              to your Twitch app&apos;s redirect URLs.
+            </li>
+            <li>
+              Set your Twitch login in{' '}
+              <code className="bg-muted px-1 rounded">ADMIN_USERS</code> (twitch
+              worker) and{' '}
+              <code className="bg-muted px-1 rounded">
+                LINGUAL_PREVIEW_USERS
+              </code>{' '}
+              (core). Both are empty-means-nobody lists.
+            </li>
+            <li>Set the worker&apos;s secrets:</li>
+          </ol>
+          <CodeBlock copyable>
+            {`cd workers/twitch
+wrangler secret put TWITCH_SECRET
+wrangler secret put TWITCH_EVENTSUB_SECRET  # any random 10-100 characters`}
+          </CodeBlock>
+          <p>
+            After deploying, log into Twitch <strong>as the bot account</strong>{' '}
+            and open{' '}
+            <code className="bg-muted px-1 rounded">/bot/authorize</code> on the
+            bot&apos;s domain, then open{' '}
+            <code className="bg-muted px-1 rounded">/admin/bootstrap</code> and
+            press its button. Streamers then turn Lingual on from Bots &rarr;
+            Lingual.
+          </p>
+          <p className="text-sm">
+            Full details are in{' '}
+            <a
+              href="https://github.com/thecodedrift/pvtch/blob/main/workers/twitch/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand hover:underline"
+            >
+              workers/twitch/README.md
+            </a>
+            .
           </p>
         </Step>
       </div>

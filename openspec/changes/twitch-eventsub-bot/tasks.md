@@ -65,8 +65,8 @@
 
 ## 8. Verify and roll out
 
-- [ ] 8.1 Run `typecheck`, `lint` and `test` for `@pvtch/shared`, `@pvtch/storage`, `@pvtch/twitch` and `@pvtch/core`.
-- [ ] 8.2 Local end-to-end: `wrangler dev` with all configs. Send events with Twitch CLI (`twitch event trigger channel.chat.message --forward-address http://localhost:8787/eventsub --secret ...`) and `twitch event verify-subscription`.
+- [x] 8.1 Run `typecheck`, `lint` and `test` for `@pvtch/shared`, `@pvtch/storage`, `@pvtch/twitch` and `@pvtch/core`.
+- [x] 8.2 Local end-to-end of the webhook under `wrangler dev` (twitch + storage): signed challenge, bad signature, stale timestamp, notification, revocation and unknown path all behave as specified. The Twitch CLI wasn't installed, so events were signed by a script; the chat-to-reply path is covered by unit tests and gets its live check in 8.3.
 - [ ] 8.3 Merge to main so the GitHub deploy workflow (from `twitch-storage-foundation`) deploys storage first, then the affected workers. Add `@pvtch/twitch` and `@pvtch/shared` to its turbo inputs if they are not already covered. Grant the bot's scopes through `/bot/authorize`, run `/admin/bootstrap`, enable the bot on an allowed test channel, and confirm a threaded reply.
-- [ ] 8.3a Extend `app/routes/howto/deploy-your-own.tsx` for self-hosters: add `workers/twitch` to "How PVTCH Is Split Up", plus the queues, the bot account, the `/auth/grant/callback` redirect URI, and the custom domain.
-- [ ] 8.4 Document setup and deploy order in `workers/twitch/README.md`. Record the answers to the design's open questions.
+- [x] 8.3a Extend `app/routes/howto/deploy-your-own.tsx` for self-hosters: add `workers/twitch` to "How PVTCH Is Split Up", plus the queues, the bot account, the `/auth/grant/callback` redirect URI, and the custom domain.
+- [x] 8.4 Document setup and deploy order in `workers/twitch/README.md`. Record the answers to the design's open questions.
