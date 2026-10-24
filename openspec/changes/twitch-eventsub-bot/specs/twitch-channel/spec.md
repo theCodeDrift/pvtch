@@ -46,3 +46,17 @@ While the bot is enabled, `TwitchChannel` SHALL run a cron job `reconcile-subscr
 
 - **WHEN** the reconcile cron fires for an enabled channel
 - **THEN** one `reconcile` message is enqueued
+
+### Requirement: Lingual settings storage
+
+`TwitchChannel` SHALL store Lingual's settings in a single-row `lingual_settings` table added by a schema migration: `language` (nullable) and `ignored_chatters` (a JSON array). `getLingualSettings()` SHALL return `{ language: null, ignoredChatters: [] }` when nothing is saved. `setLingualSettings()` SHALL replace both values, lowercasing the language (an empty one clears it) and lowercasing, stripping a leading `@` from, and de-duplicating chatter logins. Callers SHALL validate the language.
+
+#### Scenario: Defaults
+
+- **WHEN** `getLingualSettings()` is called on a channel that never saved settings
+- **THEN** it returns `{ language: null, ignoredChatters: [] }`
+
+#### Scenario: Normalization
+
+- **WHEN** `setLingualSettings({ language: ' Spanish ', ignoredChatters: ['@StreamElements', 'nightbot', 'NIGHTBOT'] })` is called
+- **THEN** the stored settings are `{ language: 'spanish', ignoredChatters: ['streamelements', 'nightbot'] }`

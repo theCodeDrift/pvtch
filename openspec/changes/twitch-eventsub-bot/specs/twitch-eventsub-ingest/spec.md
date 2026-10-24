@@ -2,7 +2,7 @@
 
 ### Requirement: Twitch worker on its own domain
 
-The system SHALL provide a Cloudflare worker at `workers/twitch` (package `@pvtch/twitch`, script `pvtch-twitch`) served on the custom domain `twitch.pvtch.com`. It SHALL expose `POST /eventsub`, `GET /bot/authorize`, `GET /bot/callback`, and `POST /admin/bootstrap`, and SHALL return HTTP 404 for all other paths. It SHALL serve no user-facing pages.
+The system SHALL provide a Cloudflare worker at `workers/twitch` (package `@pvtch/twitch`, script `pvtch-twitch`) served on the custom domain `twitch.pvtch.com`. It SHALL expose `POST /eventsub`, `GET /bot/authorize`, `GET /bot/callback`, `GET|POST /admin/bootstrap`, and `GET /admin/status`, and SHALL return HTTP 404 for all other paths. It SHALL serve no user-facing pages.
 
 #### Scenario: Unknown path
 
@@ -87,3 +87,12 @@ The `twitch-events` consumer SHALL run with `max_batch_size: 1`, `max_batch_time
 
 - **WHEN** an event with an unhandled `subscriptionType` is consumed
 - **THEN** it is logged and acked
+
+### Requirement: Admin status diagnostics
+
+`GET /admin/status` SHALL be restricted to `ADMIN_USERS` and SHALL be read-only. It SHALL return JSON with the app's EventSub subscriptions as Twitch reports them (`GET /helix/eventsub/subscriptions`) alongside the broadcaster's `TwitchChannel` state (bot state, chat subscription record, Lingual settings). The broadcaster defaults to the admin's own user id and can be overridden with `?broadcaster=<user id>`.
+
+#### Scenario: Non-admin
+
+- **WHEN** a logged-in user not in `ADMIN_USERS` requests `/admin/status`
+- **THEN** the response is HTTP 403

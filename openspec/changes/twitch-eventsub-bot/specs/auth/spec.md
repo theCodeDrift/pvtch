@@ -11,7 +11,7 @@ The login flow (`/auth/start`) SHALL continue to request no OAuth scopes (the `s
 
 ### Requirement: General scope grant flow
 
-`pvtch-api` SHALL provide `GET /auth/grant` for authenticated users, taking `scopes` (space- or comma-separated) and `return_to` (a same-origin relative path). Every requested scope SHALL be in a `GRANTABLE_SCOPES` allowlist (initially `channel:bot`); otherwise the request SHALL be rejected with HTTP 400. The flow SHALL redirect to Twitch authorize requesting the union of the requested scopes and the user's already-recorded scopes, so pvtch's authorization is never narrowed, with `redirect_uri` set to `/auth/grant/callback` and a random `state` stored with `return_to` in a short-lived, HttpOnly cookie. The flow is feature-agnostic: it SHALL NOT enable or change any feature state.
+`pvtch` SHALL provide `GET /auth/grant` for authenticated users, taking `scopes` (space- or comma-separated) and `return_to` (a same-origin relative path). Every requested scope SHALL be in a `GRANTABLE_SCOPES` allowlist (initially `channel:bot`); otherwise the request SHALL be rejected with HTTP 400. The flow SHALL redirect to Twitch authorize requesting the union of the requested scopes and the user's already-recorded scopes, so pvtch's authorization is never narrowed, with `redirect_uri` set to `/auth/grant/callback` and a random `state` stored with `return_to` in a short-lived, HttpOnly cookie. The flow is feature-agnostic: it SHALL NOT enable or change any feature state.
 
 #### Scenario: Request a grantable scope
 

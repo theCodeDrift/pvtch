@@ -21,7 +21,7 @@ Enabling Lingual SHALL require `channel:bot` in the user's recorded scopes. The 
 
 ### Requirement: Bot settings UI
 
-The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots" whose first entry is "Lingual", linking to `/bots/lingual` inside the shared app layout. During rollout, the section and the page's controls SHALL be visible only to users whose Twitch login is in `LINGUAL_PREVIEW_USERS` (a comma-separated `pvtch-api` var, case-insensitive; empty shows them to no one). The page SHALL show the bot's state and stored subscription status from `TwitchChannel` (Off, Connecting, Live, or the failed status), the target language from the user's Lingo config with a link to `/helpers/lingo`, and the bot's login (`LINGUAL_BOT_LOGIN`). It SHALL offer "Turn on Lingual" when disabled and "Turn off Lingual" when enabled. Turning off SHALL call `disableBot()` (which requests the unsubscribe) and SHALL NOT remove recorded scopes.
+The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots" whose first entry is "Lingual", linking to `/bots/lingual` inside the shared app layout. During rollout, the section and the page's controls SHALL be visible only to users whose Twitch login is in `LINGUAL_PREVIEW_USERS` (a comma-separated `pvtch` var, case-insensitive; empty shows them to no one). The page SHALL show the bot's state and stored subscription status from `TwitchChannel` (Off, Connecting, Live, or the failed status), the bot's login (`LINGUAL_BOT_LOGIN`), and a Settings form for Lingual's own target language (supported languages only) and up to 25 ignored chatters, saved with `setLingualSettings()`. It SHALL offer "Turn on Lingual" when disabled and "Turn off Lingual" when enabled. Turning off SHALL call `disableBot()` (which requests the unsubscribe) and SHALL NOT remove recorded scopes.
 
 #### Scenario: Enabled with pending subscription
 
@@ -45,8 +45,13 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots
 
 #### Scenario: No target language yet
 
-- **WHEN** the user has no Lingo target language configured
-- **THEN** the page tells them to set one in Lingo settings first
+- **WHEN** the user has no Lingual language saved
+- **THEN** the page tells them to pick one in the Settings form; Lingual stays quiet until they do
+
+#### Scenario: Unsupported language
+
+- **WHEN** the user submits a language that is not on the supported target list
+- **THEN** nothing is saved and an error is shown
 
 ### Requirement: One-time bot account authorization
 

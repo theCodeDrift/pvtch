@@ -1,6 +1,6 @@
 ## Context
 
-- **Lingo today**: a third-party chatbot calls `GET|POST /lingo/translate/:token` on `pvtch-api`. The route checks the known-bots list, `!` commands, `imtyping`, and the user's ignore list. It loads `{ bots, language }` from the `User` DO's `lingo` plugin, runs `decide()` (preprocess, length gate, script gate, tinyld + franc ensemble), calls Workers AI (`translator.ts`), and returns `ImTyping <translation>`.
+- **Lingo today**: a third-party chatbot calls `GET|POST /lingo/translate/:token` on `pvtch`. The route checks the known-bots list, `!` commands, `imtyping`, and the user's ignore list. It loads `{ bots, language }` from the `User` DO's `lingo` plugin, runs `decide()` (preprocess, length gate, script gate, tinyld + franc ensemble), calls Workers AI (`translator.ts`), and returns `ImTyping <translation>`.
 - **Auth today**: Twitch OAuth with no scopes. Session tokens live in the `PVTCH_ACCOUNTS` KV (`token-data-*` → userId, `twitch-data-*` → profile).
 - **After `twitch-storage-foundation`**: `pvtch-storage` hosts `TwitchChannel` (bot state, subscription record, `claimMessage`, `acquireSendSlot`, `JobScheduler` with cron).
 - **Twitch facts this design relies on**:
@@ -49,7 +49,7 @@ Both Twitch and Queues deliver at least once. The consumer calls `claimMessage(m
 
 ### 3. Every Twitch API call happens in the twitch worker's consumer
 
-`pvtch-api` and `TwitchChannel` never call Twitch. `pvtch-api` only calls `enableBot()` / `disableBot()`. On a state change, `TwitchChannel` enqueues the work message itself, and its reconcile cron enqueues too, so no caller can forget the side effect. The messages go to `twitch-events`:
+`pvtch` and `TwitchChannel` never call Twitch. `pvtch` only calls `enableBot()` / `disableBot()`. On a state change, `TwitchChannel` enqueues the work message itself, and its reconcile cron enqueues too, so no caller can forget the side effect. The messages go to `twitch-events`:
 
 - `{ kind: 'subscribe', broadcasterId }`
 - `{ kind: 'unsubscribe', broadcasterId }`
@@ -57,7 +57,7 @@ Both Twitch and Queues deliver at least once. The consumer calls `claimMessage(m
 
 This keeps the app token, the Helix error handling and the backoff in one place.
 
-_Alternative considered:_ a service binding RPC from `pvtch-api` to `pvtch-twitch`. Rejected: it makes the UI wait on Twitch, and retries would need a second mechanism.
+_Alternative considered:_ a service binding RPC from `pvtch` to `pvtch-twitch`. Rejected: it makes the UI wait on Twitch, and retries would need a second mechanism.
 
 ### 4. Use an app access token; store no user tokens
 
@@ -85,19 +85,16 @@ For each reply, the consumer:
 Skip the event when any of these hold:
 
 - `chatter_user_id === TWITCH_BOT_USER_ID`
-- the chatter is in `knownBots` or the channel's `bots` list
+- the chatter is in `knownBots` or the channel's Lingual `ignoredChatters`
 - the text starts with `!`
 - `source_broadcaster_user_id` is set and differs from `broadcaster_user_id`. In Shared Chat sessions every participating channel receives each message, and only the source channel's bot should translate it.
 
-### 7. Read lingo config from the `User` DO via `script_name: "pvtch-api"`
+### 7. Lingual keeps its own settings in `TwitchChannel`
 
-`pvtch-twitch` binds `PVTCH_USER` with `script_name: "pvtch-api"` and calls `lingo().getConfig()`. This is a read-only cross-worker binding. It doesn't migrate the DO, and the streamer keeps a single place to set their language.
+Lingual's target language and ignored chatters live in `TwitchChannel` (`lingual_settings`) and are edited on `/bots/lingual`. The bot reads them with `getLingualSettings()`, the same DO it already uses for bot state, so `pvtch-twitch` has no binding to core's Durable Objects.
 
-Typing uses multi-config typegen (`-c ../core/wrangler.jsonc`) with `import type` only.
+_Alternative considered and reverted:_ reading the Lingo helper's config from core's `User` DO through a `script_name` binding. It was built first, then dropped: it coupled `pvtch-twitch` to core's worker name and DO layout, which broke when core's worker was replaced and renamed to `pvtch`, and Lingual and the Lingo helper are separate products.
 
-_Alternatives considered:_
-
-- Copying the config into `TwitchChannel` on save. Rejected: dual writes drift apart.
 - A service binding RPC. Possible later if `User`'s import graph makes typegen painful.
 
 ### 8. `packages/shared` holds data both workers need, not detection logic
@@ -137,7 +134,6 @@ The bot-account authorization is the one exception, on `twitch.pvtch.com/bot/*`.
 
 - [The webhook endpoint becomes a target for spam] → HMAC is checked before any other work, invalid requests are rejected with 403 without a body, and Cloudflare rate-limiting rules apply to `/eventsub`.
 - [The queue is down or slow, so Twitch sees failures and revokes subscriptions] → Return 2xx after the enqueue succeeds; return 5xx if the enqueue fails so Twitch retries. The reconcile job recreates revoked subscriptions within its period.
-- [Cross-worker binding to `pvtch-api`'s `User` DO couples deploys] → The bot only calls `lingo().getConfig()`. Renaming or removing that method breaks the bot, so add a comment on the `User` DO noting the external caller.
 - [Bot gets modded but stays on the standard tier] → It sends at most 20 per 30 seconds, which is conservative but safe. Detecting the mod tier is an open question.
 - [Translations land in chat before the streamer expects it] → The bot is off by default. Enabling it requires a deliberate consent step, and the settings show the current subscription status.
 - [Twitch scope semantics change] → The `channel:bot` flow is isolated in `bot-consent`, and the reconcile job surfaces failures through the subscription status.
@@ -146,21 +142,23 @@ The bot-account authorization is the one exception, on `twitch.pvtch.com/bot/*`.
 
 1. Create the bot Twitch account, then register both redirect URIs on the Twitch app.
 2. Create the queues `twitch-events` and `twitch-events-dlq` and the custom domain `twitch.pvtch.com`.
-3. Merge to main. The GitHub deploy workflow deploys `pvtch-storage` first (queue producer and reconcile job), then the affected workers (`pvtch-twitch` and `pvtch-api`).
-4. On `pvtch-twitch`, log into www as the bot account and visit `/bot/authorize` once to grant the bot's scopes. Create the app-level `user.authorization.revoke` subscription (a one-off admin action at `/admin/bootstrap`, restricted to `ALLOWED_USERS`).
+3. Merge to main. The GitHub deploy workflow deploys `pvtch-storage` first (queue producer and reconcile job), then the affected workers (`pvtch-twitch` and `pvtch`).
+4. On `pvtch-twitch`, log into www as the bot account and visit `/bot/authorize` once to grant the bot's scopes. Create the app-level `user.authorization.revoke` subscription (a one-off admin action at `/admin/bootstrap`, restricted to `ADMIN_USERS`). `/admin/status` shows Twitch's subscriptions next to the channel's recorded state if a channel sticks at Connecting.
 5. Roll out behind `LINGUAL_PREVIEW_USERS` (starting with `theCodeDrift`). `ALLOWED_USERS` can't be the gate: empty means the whole instance is open, and production runs it empty.
 6. Rollback: hide the enable UI and enqueue `unsubscribe` for every enabled channel. Workers can be rolled back on their own, because the enable flag lives in `TwitchChannel`.
 
 ## Open Questions
 
-- Does re-authorizing with fewer scopes (a scope-free `/auth/start` login after a `channel:bot` grant) remove `channel:bot` from the user's Twitch authorization? To test: grant `channel:bot` on a test account, log in again, then check whether a `channel.chat.message` subscription can still be created.
+None remaining.
 
 ## Resolved Questions
 
-- **One Twitch app:** `pvtch-api` and `pvtch-twitch` share one client ID (`yrx2abngfobvh0zhgdwgwbr5yzbqop`). Twitch ties a broadcaster's `channel:bot` grant to the client they approved, and checks it against the app token that creates the subscription, so the grant flow on www and the bot must use the same app. This replaced pvtch's original app; its redirect URIs (`/auth/callback`, `/auth/grant/callback`, `/bot/callback`) and core's `TWITCH_SECRET` move with it.
+- **Scope-free re-login:** verified on 2026-10-24. Logging out and back in through `/auth/start` after granting `channel:bot` left Lingual live and replying, so `/auth/start` keeps requesting no scopes.
+- **Core's worker name:** core deploys as `pvtch` and declares `www.pvtch.com` as a `custom_domain` route in its config, so every deploy keeps www bound to it.
+- **One Twitch app:** `pvtch` and `pvtch-twitch` share one client ID (`yrx2abngfobvh0zhgdwgwbr5yzbqop`). Twitch ties a broadcaster's `channel:bot` grant to the client they approved, and checks it against the app token that creates the subscription, so the grant flow on www and the bot must use the same app. This replaced pvtch's original app; its redirect URIs (`/auth/callback`, `/auth/grant/callback`, `/bot/callback`) and core's `TWITCH_SECRET` move with it.
 - **Reconcile period:** every 6 hours (`0 */6 * * *`), plus the subscribe request made when the bot is enabled.
-- **Admin and rollout gates:** `ADMIN_USERS` (pvtch-twitch) and `LINGUAL_PREVIEW_USERS` (pvtch-api), both fail-closed, starting with `theCodeDrift`.
+- **Admin and rollout gates:** `ADMIN_USERS` (pvtch-twitch) and `LINGUAL_PREVIEW_USERS` (pvtch), both fail-closed, starting with `theCodeDrift`.
 
 - **Mod tier (yes):** the bot receives its own messages as `channel.chat.message` events, and their `badges` show whether it is a moderator. The consumer reads them, sets `setSendTier` accordingly, and then skips the event. No bot user token or extra scope is needed. While the bot is unmodded it stays on the standard tier.
-- **UI placement:** a new "Bots" section in the dashboard sidebar. Its first entry is "Lingual" at `/bots/lingual`. Scope consent goes through the general `/auth/grant` flow rather than routes specific to Lingual. Language and ignore-list settings stay on `/helpers/lingo`.
+- **UI placement:** a new "Bots" section in the dashboard sidebar. Its first entry is "Lingual" at `/bots/lingual`. Scope consent goes through the general `/auth/grant` flow rather than routes specific to Lingual. Lingual's language and ignore list are its own, on `/bots/lingual`; the Lingo helper's settings stay on `/helpers/lingo`.
 - **`PVTCH_TRANSLATIONS`:** belongs to the old non-bot translation cache, which is abandoned. `twitch-storage-foundation` removes the binding from `workers/core`, the README, and the deploy-your-own guide. The bot never uses it.

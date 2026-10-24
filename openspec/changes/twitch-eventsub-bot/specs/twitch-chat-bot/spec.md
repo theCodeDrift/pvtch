@@ -62,7 +62,7 @@ The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscri
 
 ### Requirement: Event filtering and loop prevention
 
-For each `channel.chat.message` event the consumer SHALL skip without sending when any of: the bot is disabled for the channel; `chatter_user_id` equals `TWITCH_BOT_USER_ID`; `chatter_user_login` is in `knownBots` or the channel's configured `bots` list (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`.
+For each `channel.chat.message` event the consumer SHALL skip without sending when any of: the bot is disabled for the channel; `chatter_user_id` equals `TWITCH_BOT_USER_ID`; `chatter_user_login` is in `knownBots` or the channel's Lingual `ignoredChatters` (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`.
 
 #### Scenario: Bot's own message
 

@@ -1,17 +1,22 @@
 ## ADDED Requirements
 
-### Requirement: Bot config read from the User Durable Object
+### Requirement: Lingual settings live in TwitchChannel
 
-The bot pipeline SHALL read `{ bots, language }` from the broadcaster's existing `User` DO (`PVTCH_USER` bound with `script_name: "pvtch-api"`, addressed `twitch:{broadcasterId}`) via `lingo().getConfig()`. If no config or no `language` exists, the event SHALL be acked without translating. The bot SHALL NOT write to the `User` DO.
+Lingual SHALL keep its own settings, a target `language` and a list of `ignoredChatters`, in the broadcaster's `TwitchChannel` (`getLingualSettings()`), separate from the Lingo helper's config. `pvtch-twitch` SHALL NOT bind or read core's `User` DO. If no `language` is set, the event SHALL be acked without translating.
 
 #### Scenario: Configured channel
 
-- **WHEN** a chat event arrives for a broadcaster whose lingo language is `english`
+- **WHEN** a chat event arrives for a broadcaster whose Lingual language is `english`
 - **THEN** the pipeline targets English
 
 #### Scenario: Unconfigured channel
 
-- **WHEN** a chat event arrives for a broadcaster with no lingo config
+- **WHEN** a chat event arrives for a broadcaster with no Lingual language set
+- **THEN** no translation or send occurs
+
+#### Scenario: Lingo helper settings are not used
+
+- **WHEN** a broadcaster has a Lingo helper language but no Lingual language
 - **THEN** no translation or send occurs
 
 ### Requirement: Fragment-based detection input
