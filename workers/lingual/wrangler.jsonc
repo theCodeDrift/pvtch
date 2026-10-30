@@ -1,0 +1,65 @@
+/**
+ * pvtch Lingual Worker
+ *
+ * The Lingual handler: translates chat for channels that turned Lingual on.
+ * Consumes `lingual-events`, which pvtch-twitch's router fans chat events
+ * into, and replies by enqueuing `send` requests on `twitch-events`. Holds no
+ * Twitch credentials and serves no routes.
+ *
+ * Deploy order: pvtch-storage first (TWITCH_CHANNEL). The lingual-events
+ * queues must exist.
+ */
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pvtch-lingual",
+  // pvtch's Cloudflare account. Keeps local wrangler commands from landing
+  // in another account the CLI happens to be logged into.
+  "account_id": "bda0488147d6159dfe8913c8ee9d2413",
+  "main": "./src/index.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-04-01",
+  "upload_source_maps": true,
+  "workers_dev": false,
+
+  "observability": {
+    "enabled": true,
+  },
+
+  "ai": {
+    "binding": "AI",
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TWITCH_CHANNEL",
+        "class_name": "TwitchChannel",
+        "script_name": "pvtch-storage",
+      },
+    ],
+  },
+
+  /**
+   * MANUAL SETUP REQUIRED: create the queues before deploying.
+   *   wrangler queues create lingual-events
+   *   wrangler queues create lingual-events-dlq
+   */
+  "queues": {
+    "producers": [
+      {
+        "queue": "twitch-events",
+        "binding": "TWITCH_EVENTS",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "lingual-events",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+        "max_concurrency": 10,
+        "dead_letter_queue": "lingual-events-dlq",
+      },
+    ],
+  },
+}
