@@ -1,6 +1,7 @@
 ## 0. Prerequisites
 
-- [ ] 0.1 Create the queues: `wrangler queues create lingual-events` and `wrangler queues create lingual-events-dlq`.
+- [x] 0.1 Create the queues on the pvtch account (`bda0488147d6159dfe8913c8ee9d2413`): `lingual-events` (`e7fadfc916634d8eb136326e0f4e9a40`) and `lingual-events-dlq` (`992069321b294577b5cfd569a002122c`). Bindings refer to them by name, so no ID goes in config.
+- [x] 0.2 Pin `account_id` in every worker's `wrangler.jsonc`. `workers/lingual` gets the same line when it is scaffolded (4.1).
 
 ## 1. Shared registry and messages (packages/shared)
 
