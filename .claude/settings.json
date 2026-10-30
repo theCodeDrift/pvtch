@@ -19,6 +19,7 @@
       "Bash(head:*)",
       "Bash(ls:*)",
       "Bash(mkdir:*)",
+      "Bash(openspec:*)",
       "Bash(pnpm openspec:*)",
       "Bash(pnpm:*)",
       "Bash(sort:*)",
@@ -33,7 +34,7 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__linear__*"
     ],
-    "deny": ["Bash(npx:*)", "Bash(openspec:*)", "AskUserQuestion*"]
+    "deny": ["Bash(npx:*)", "AskUserQuestion*"]
   },
   "read": {
     "deny": [
