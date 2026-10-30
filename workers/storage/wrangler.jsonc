@@ -10,6 +10,9 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "pvtch-storage",
+  // pvtch's Cloudflare account. Keeps local wrangler commands from landing
+  // in another account the CLI happens to be logged into.
+  "account_id": "bda0488147d6159dfe8913c8ee9d2413",
   "main": "./src/index.ts",
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2025-04-01",
