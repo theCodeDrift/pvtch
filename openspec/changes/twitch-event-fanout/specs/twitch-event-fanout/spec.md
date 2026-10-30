@@ -76,9 +76,9 @@ Before acting on a handler message on its first attempt (`attempts === 1`), a ha
 
 ### Requirement: Send requests
 
-Handlers SHALL send chat only by enqueuing `{ kind: 'send', broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }` to `twitch-events`, where `timestamp` is the source event's. Handler workers SHALL NOT call Helix or hold Twitch credentials.
+Handlers SHALL send chat only by enqueuing `{ kind: 'send', sendId, broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }` to `twitch-events`, where `timestamp` is the source event's and `sendId` is deterministic for the outcome being sent (Lingual: `lingual:<messageId>`), so a duplicate request carries the same id. Handler workers SHALL NOT call Helix or hold Twitch credentials.
 
 #### Scenario: Reply requested
 
 - **WHEN** `pvtch-lingual` produces a translation
-- **THEN** it enqueues one `send` message for `botlingual` threaded to the source message, and makes no Helix call
+- **THEN** it enqueues one `send` message for `botlingual` with `sendId` `lingual:<messageId>`, threaded to the source message, and makes no Helix call

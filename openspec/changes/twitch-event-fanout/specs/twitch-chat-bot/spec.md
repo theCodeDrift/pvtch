@@ -68,7 +68,7 @@ When the router consumes a `channel.chat.message` whose `chatter_user_id` equals
 
 ### Requirement: Rate-limited reply sending
 
-When `pvtch-twitch` consumes `{ kind: 'send', broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }`, it SHALL: (1) ack without sending if `timestamp` is more than 60 seconds old; (2) call `acquireSendSlot(senderId)` and, on `{ ok: false, retryAfterMs }`, retry the queue message with `delaySeconds = ceil(retryAfterMs / 1000)`; (3) call `POST /helix/chat/messages` with `broadcaster_id`, `sender_id: TWITCH_SENDERS[senderId].userId`, `message`, and `reply_parent_message_id`. On HTTP 429 it SHALL retry with delay derived from the `Ratelimit-Reset` header; on 5xx it SHALL retry with default backoff; on 403 it SHALL disable every handler using `senderId` and ack; on 200 with `is_sent: false` it SHALL log `drop_reason.code` with the `handlerId` and ack without retry.
+When `pvtch-twitch` consumes `{ kind: 'send', sendId, broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }`, it SHALL: (1) ack without sending if `timestamp` is more than 60 seconds old; (2) call `acquireSendSlot(senderId, claimKey)` with `claimKey` `send:<sendId>` on the first attempt and `null` on retries, ack without sending on `{ ok: false, duplicate: true }`, and on `{ ok: false, retryAfterMs }` retry the queue message with `delaySeconds = ceil(retryAfterMs / 1000)`; (3) call `POST /helix/chat/messages` with `broadcaster_id`, `sender_id: TWITCH_SENDERS[senderId].userId`, `message`, and `reply_parent_message_id`. On HTTP 429 it SHALL retry with delay derived from the `Ratelimit-Reset` header; on 5xx it SHALL retry with default backoff; on 403 it SHALL disable every handler using `senderId` and ack; on 200 with `is_sent: false` it SHALL log `drop_reason.code` with the `handlerId` and ack without retry.
 
 #### Scenario: Successful reply
 
@@ -77,8 +77,13 @@ When `pvtch-twitch` consumes `{ kind: 'send', broadcasterId, senderId, handlerId
 
 #### Scenario: Local bucket empty
 
-- **WHEN** `acquireSendSlot('botlingual')` returns `{ ok: false, retryAfterMs: 1500 }`
+- **WHEN** `acquireSendSlot` returns `{ ok: false, retryAfterMs: 1500 }`
 - **THEN** the queue message is retried with `delaySeconds: 2` and Helix is not called
+
+#### Scenario: Duplicate send request
+
+- **WHEN** the same `send` (same `sendId`) is delivered twice as a first attempt
+- **THEN** Helix is called once and the duplicate is acked
 
 #### Scenario: Helix rate limited
 

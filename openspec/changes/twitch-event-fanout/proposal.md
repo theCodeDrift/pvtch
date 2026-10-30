@@ -16,7 +16,7 @@ Nobody but the maintainer uses Lingual yet, so this change reshapes storage, que
 - **Subscription sync per sender.** Enabling or disabling a handler schedules a sync for its sender. The sync computes which subscriptions the enabled handlers need and creates or deletes subscriptions to match. This replaces separate subscribe and unsubscribe work.
 - **`TwitchChannel` as a plugin host.** Handler state lives in `RpcTarget` plugins with their own migrations, following the core `User` DO's pattern: `using lingual = await channel.lingual()`. The DO's own schema keeps only shared state: handler enablement, per-sender subscriptions and send buckets, message dedupe, and the scheduler.
 - **Feature flags** instead of an experimental worker. A per-channel `Flags` plugin holds names like `lingual.<feature>`. The router copies the flags into each handler message, and admins toggle them at `/admin/flags`.
-- **Duplicate deliveries.** Queues deliver at least once and have no idempotency key, so `routeEvent` claims the message for the router, and each handler claims `<handlerId>:<messageId>` before acting. A router retry that fans out again is absorbed by those handler claims.
+- **Duplicate deliveries.** Queues deliver at least once and have no idempotency key, so every hop claims on the per-channel `TwitchChannel`. `routeEvent` claims the message for the router. Each handler claims `<handlerId>:<messageId>` before acting. The send step claims `send:<sendId>` inside `acquireSendSlot`. Each claim folds into a call that hop already makes, so there are no extra round trips and no global bottleneck.
 - **Out of scope.** A second handler, migrating Lingual's existing state (it is reset), and changes to the Lingo helper endpoint on www.
 
 ## Capabilities
