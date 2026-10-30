@@ -74,25 +74,31 @@ A handler worker consumes its queue with `max_batch_size: 1`, its own `max_retri
 
 `pvtch-lingual` (`workers/lingual`): queue `lingual-events`, DLQ `lingual-events-dlq`, bindings `TWITCH_CHANNEL`, `TWITCH_EVENTS` (producer) and `AI`, with `workers_dev: false` and no routes. It takes today's `bot/chat.ts` filtering (minus send tier and own-message handling, which move to the router) and the `lingo/` pipeline.
 
-### 4. Dedupe at two levels with one DO primitive
+### 4. Dedupe at every hop with one DO primitive
 
-`TwitchChannel.claim(key)` is today's atomic claim, generalized to any key, with the same 15-minute window and prune job:
+Cloudflare Queues have no idempotency key, and KV's eventual consistency can't back an atomic claim. A single global dedupe DO would serialize every event across all channels. So claims live on the per-channel `TwitchChannel`, which is sharded by broadcaster and already on every hop's path. By the time a claim runs, the router has already dropped untracked and unwanted events, so a channel only contends with its own traffic.
 
-- `routeEvent` claims the raw `messageId` (router level: the same Twitch delivery is fanned out at most once).
-- A handler claims `<handlerId>:<messageId>` on its first attempt (`attempts === 1`) before acting. A repeated fan-out, or a duplicate on the handler queue, fails the claim and is acked.
+`TwitchChannel.claim(key)` is today's atomic claim, generalized to any key, with the same 15-minute window and prune job. Each hop claims only on its first attempt (`attempts === 1`), so its own retries are never rejected:
 
-That covers both places where the missing queue idempotency key would bite.
+- **Router:** `routeEvent` claims the raw `messageId`, so a Twitch delivery is fanned out at most once.
+- **Handler:** claims `<handlerId>:<messageId>` before acting. A repeated fan-out, or a duplicate on the handler queue, fails the claim and is acked.
+- **Send:** `acquireSendSlot(senderId, 'send:<sendId>')` claims the send in the same call that takes the token (decision 5). A duplicate `send` fails the claim and is acked.
+
+None of these claims costs an extra round trip; each folds into a call the hop already makes to the channel DO.
 
 ### 5. Sending through `pvtch-twitch`
 
-Handlers enqueue `{ kind: 'send', broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }` to `twitch-events`. The `pvtch-twitch` consumer then:
+Handlers enqueue `{ kind: 'send', sendId, broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }` to `twitch-events`. `sendId` is chosen by the handler and must be deterministic for a given outcome. Lingual uses `lingual:<messageId>`. A handler that someday posts several messages for one event adds a suffix. The `pvtch-twitch` consumer then:
 
 1. skips if `timestamp` is more than 60 seconds old;
-2. calls `acquireSendSlot(senderId)` and retries the queue message by `retryAfterMs` if no slot is free;
+2. calls `acquireSendSlot(senderId, attempts === 1 ? 'send:<sendId>' : null)`:
+   - `{ ok: false, duplicate: true }`: the send was already claimed. Ack without sending and without taking a token.
+   - `{ ok: false, retryAfterMs }`: no slot is free. The claim is kept, and the queue message retries after `retryAfterMs`. The retry passes `null`, so it isn't rejected as a duplicate.
+   - `{ ok: true }`: claimed and a token taken.
 3. calls `POST /helix/chat/messages` with `sender_id: TWITCH_SENDERS[senderId].userId` and the reply parent;
 4. on 429 retries per `Ratelimit-Reset`; on 5xx uses the default retry; on 403 disables every handler on the channel that uses `senderId`; on `is_sent: false` logs `drop_reason` and acks.
 
-`send` is not deduped. A duplicate `send` would post twice, but it can only come from a duplicate delivery of the handler's own enqueue, which is rare. Adding a send claim (`send:<handlerId>:<replyParentMessageId>`) is a one-line change if it ever happens.
+Folding the claim into `acquireSendSlot` keeps sending at one DO call. The claim runs before the token check in the same transaction, so a duplicate never spends a token.
 
 ### 6. `TwitchChannel`: generic state, plugins and sync
 
@@ -106,7 +112,7 @@ RPC methods:
 
 - handlers: `getHandler(h)`, `listHandlers()`, `enableHandler(h)`, `disableHandler(h)`
 - subscriptions: `get/set/clearSubscription(senderId, type)`
-- sending: `acquireSendSlot(senderId)`, `setSendTier(senderId, tier)`
+- sending: `acquireSendSlot(senderId, claimKey)`, `setSendTier(senderId, tier)`
 - routing and dedupe: `routeEvent(...)`, `claim(key)`
 - plugins: `lingual()`, `flags()`
 
@@ -135,7 +141,8 @@ Moderator status belongs to the sending account in a channel, so the router sets
 ## Risks / Trade-offs
 
 - **[Latency]** → A reply now takes three queue hops: ingest, handler, send. Each adds up to `max_batch_timeout` (1 s) plus delivery time. Accepted for a translation bot. The 60-second staleness cutoff still applies at send time.
-- **[Fan-out retry duplicates]** → Absorbed by the handler claims (decision 4). This costs one extra DO call per handler message.
+- **[Duplicate deliveries]** → Absorbed by the claims at each hop (decision 4), with no extra DO calls.
+- **[Ambiguous Helix outcome]** → If Helix posts the message but the response is lost (a timeout or a 5xx after the post went through), the retry posts again. A claim can't detect this, because the retry holds the claim. Twitch offers no idempotency key on `POST /chat/messages`, so this is accepted.
 - **[Retry budget on `twitch-events`]** → `send` retries for an empty bucket share `max_retries: 3` with event routing, as they do today. A busy channel can still dead-letter replies; raising the limit later only touches config.
 - **[Deploy gap]** → The old twitch worker calls removed RPC methods after storage deploys. Accepted, because only the maintainer's channel is affected. Ship everything in one CI run.
 - **[Forward-only rollback]** → The migration drops the old tables, so reverting the workers won't restore Lingual. Fix forward instead.

@@ -98,7 +98,7 @@ The `Flags` plugin (`flags()`) SHALL store named flags for the channel. `list()`
 
 ### Requirement: EventSub message dedupe
 
-`TwitchChannel` SHALL provide `claim(key)` that returns `true` the first time a given key is claimed and `false` on every subsequent claim within the dedupe window (15 minutes). The router claims raw EventSub message ids (through `routeEvent`) and handlers claim `<handlerId>:<messageId>`. The claim SHALL be a single atomic statement; a claim older than the window SHALL be treated as new. Each claim SHALL schedule a one-shot `prune-dedupe` job 15 minutes out under the idempotency key `prune-dedupe`, so at most one is ever queued. The job SHALL delete claims older than the window and, if any claims remain, reschedule itself for when the oldest remaining claim expires. A channel with no claims SHALL have no pending prune job (no perpetual alarm).
+`TwitchChannel` SHALL provide `claim(key)` that returns `true` the first time a given key is claimed and `false` on every subsequent claim within the dedupe window (15 minutes). The router claims raw EventSub message ids (through `routeEvent`), handlers claim `<handlerId>:<messageId>`, and the send step claims `send:<sendId>` (through `acquireSendSlot`). The claim SHALL be a single atomic statement; a claim older than the window SHALL be treated as new. Each claim SHALL schedule a one-shot `prune-dedupe` job 15 minutes out under the idempotency key `prune-dedupe`, so at most one is ever queued. The job SHALL delete claims older than the window and, if any claims remain, reschedule itself for when the oldest remaining claim expires. A channel with no claims SHALL have no pending prune job (no perpetual alarm).
 
 #### Scenario: First claim
 
@@ -137,12 +137,22 @@ The `Flags` plugin (`flags()`) SHALL store named flags for the channel. `list()`
 
 ### Requirement: Chat-send token bucket
 
-`TwitchChannel` SHALL rate-limit outbound chat sends with a lazily-refilled token bucket per `SenderId`. `acquireSendSlot(senderId)` SHALL refill that sender's tokens by elapsed time at its tier's rate, then either consume one token and return `{ ok: true }`, or return `{ ok: false, retryAfterMs }` with the milliseconds until one token is available. The default tier SHALL be `standard` (capacity 20, refill 20 per 30 seconds); `setSendTier(senderId, 'moderator')` SHALL switch that sender to capacity 100, refill 100 per 30 seconds; `setSendTier(senderId, 'standard')` SHALL switch back. Switching tier SHALL clamp current tokens to the new capacity. A sender's first bucket SHALL start full.
+`TwitchChannel` SHALL rate-limit outbound chat sends with a lazily-refilled token bucket per `SenderId`. `acquireSendSlot(senderId, claimKey)` SHALL, when `claimKey` is a string, first `claim(claimKey)` and return `{ ok: false, duplicate: true }` without touching the bucket if the claim fails. It SHALL then refill that sender's tokens by elapsed time at its tier's rate, and either consume one token and return `{ ok: true }`, or return `{ ok: false, retryAfterMs }` with the milliseconds until one token is available, keeping any claim it made. When `claimKey` is `null` it SHALL claim nothing. The default tier SHALL be `standard` (capacity 20, refill 20 per 30 seconds); `setSendTier(senderId, 'moderator')` SHALL switch that sender to capacity 100, refill 100 per 30 seconds; `setSendTier(senderId, 'standard')` SHALL switch back. Switching tier SHALL clamp current tokens to the new capacity. A sender's first bucket SHALL start full.
 
 #### Scenario: Within limit
 
-- **WHEN** `acquireSendSlot('botlingual')` is called 20 times in quick succession on a new `standard` channel
+- **WHEN** `acquireSendSlot('botlingual', null)` is called 20 times in quick succession on a new `standard` channel
 - **THEN** all 20 return `{ ok: true }`
+
+#### Scenario: Duplicate send
+
+- **WHEN** `acquireSendSlot('botlingual', 'send:lingual:m1')` is called twice within 15 minutes
+- **THEN** the second returns `{ ok: false, duplicate: true }` and consumes no token
+
+#### Scenario: Claim kept while waiting for a slot
+
+- **WHEN** `acquireSendSlot('botlingual', 'send:lingual:m1')` returns `{ ok: false, retryAfterMs }` and the retry calls `acquireSendSlot('botlingual', null)` after the delay
+- **THEN** the retry returns `{ ok: true }`, and a later `acquireSendSlot('botlingual', 'send:lingual:m1')` returns `{ ok: false, duplicate: true }`
 
 #### Scenario: Limit exceeded
 
