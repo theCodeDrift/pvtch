@@ -1,71 +1,9 @@
-import {
-  twitchQueueMessage,
-  type TwitchEventMessage,
-} from '@pvtch/shared/twitch-queue';
+import { ack, type Outcome } from '@pvtch/shared/queue-outcome';
+import { twitchQueueMessage } from '@pvtch/shared/twitch-queue';
 
-import { handleChatMessage } from './bot/chat';
-import { handleAuthorizationRevoke } from './bot/revoke';
-import { channelStub } from './channel';
-import {
-  AUTHORIZATION_REVOKE_TYPE,
-  CHAT_MESSAGE_TYPE,
-  authorizationRevokeEvent,
-  chatMessageEvent,
-} from './eventsub/schemas';
-import { ack, type Outcome } from './outcome';
-import { reconcile, subscribe, unsubscribe } from './twitch/subscriptions';
-
-/**
- * Claim an EventSub message on its first delivery only. Twitch redeliveries
- * and duplicate queue deliveries arrive as first attempts and lose the
- * claim; our own retries (attempts > 1) already hold it.
- */
-async function claim(
-  env: Env,
-  broadcasterId: string,
-  messageId: string,
-  attempts: number
-): Promise<boolean> {
-  if (attempts > 1) return true;
-  return channelStub(env, broadcasterId).claimMessage(messageId);
-}
-
-async function handleEvent(
-  env: Env,
-  message: TwitchEventMessage,
-  attempts: number
-): Promise<Outcome> {
-  switch (message.subscriptionType) {
-    case CHAT_MESSAGE_TYPE: {
-      const event = chatMessageEvent.parse(message.event);
-      const fresh = await claim(
-        env,
-        event.broadcaster_user_id,
-        message.messageId,
-        attempts
-      );
-      if (!fresh) return ack;
-      return handleChatMessage(env, event, message.timestamp);
-    }
-    case AUTHORIZATION_REVOKE_TYPE: {
-      const event = authorizationRevokeEvent.parse(message.event);
-      const fresh = await claim(
-        env,
-        event.user_id,
-        message.messageId,
-        attempts
-      );
-      if (!fresh) return ack;
-      return handleAuthorizationRevoke(env, event);
-    }
-    default: {
-      console.warn('Unhandled EventSub type', {
-        type: message.subscriptionType,
-      });
-      return ack;
-    }
-  }
-}
+import { routeEvent } from './router';
+import { handleSend } from './twitch/send';
+import { sync } from './twitch/subscriptions';
 
 export async function handleQueueMessage(
   env: Env,
@@ -80,16 +18,13 @@ export async function handleQueueMessage(
   const message = parsed.data;
   switch (message.kind) {
     case 'event': {
-      return handleEvent(env, message, attempts);
+      return routeEvent(env, message, attempts);
     }
-    case 'subscribe': {
-      return subscribe(env, message.broadcasterId);
+    case 'sync': {
+      return sync(env, message.broadcasterId, message.senderId);
     }
-    case 'unsubscribe': {
-      return unsubscribe(env, message.broadcasterId);
-    }
-    case 'reconcile': {
-      return reconcile(env, message.broadcasterId);
+    case 'send': {
+      return handleSend(env, message, attempts);
     }
   }
 }

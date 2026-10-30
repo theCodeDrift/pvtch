@@ -11,6 +11,7 @@ import {
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { findSupportedTargetLanguage } from '@pvtch/shared/supported-languages';
+import { TWITCH_HANDLERS, TWITCH_SENDERS } from '@pvtch/shared/twitch-registry';
 import { Bot, CheckCircle, Clock, Loader, XCircle } from 'lucide-react';
 import type { Route } from './+types/bots.lingual';
 import {
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/card';
 
 const CHAT_SUBSCRIPTION = 'channel.chat.message';
+const LINGUAL_SENDER = TWITCH_HANDLERS.lingual.sender;
 
 const GRANT_ERRORS: Record<string, string> = {
   access_denied:
@@ -96,24 +98,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     url.searchParams.get('enable') === '1' &&
     (await hasLingualScope(env, user.id))
   ) {
-    await channel.enableBot();
+    await channel.enableHandler('lingual');
     return redirect('/bots/lingual?enabled=1');
   }
 
-  const [bot, subscription, settings] = await Promise.all([
-    channel.getBot(),
-    channel.getSubscription(CHAT_SUBSCRIPTION),
-    channel.getLingualSettings(),
+  using lingual = await channel.lingual();
+  const [handler, subscription, settings] = await Promise.all([
+    channel.getHandler('lingual'),
+    channel.getSubscription(LINGUAL_SENDER, CHAT_SUBSCRIPTION),
+    lingual.getSettings(),
   ]);
 
   const grantError = url.searchParams.get('grant_error');
   return data({
     state: 'ready' as const,
-    enabled: bot.enabled,
+    enabled: handler.enabled,
     subscriptionStatus: subscription?.status ?? undefined,
     language: settings.language ?? '',
     ignoredChatters: settings.ignoredChatters,
-    botLogin: env.LINGUAL_BOT_LOGIN,
+    botLogin: TWITCH_SENDERS[LINGUAL_SENDER].login,
     justEnabled: url.searchParams.get('enabled') === '1',
     grantError: grantError
       ? (GRANT_ERRORS[grantError] ?? `Twitch returned: ${grantError}`)
@@ -134,11 +137,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (intent === 'enable') {
     if (!(await hasLingualScope(env, user.id))) return redirect(GRANT_URL);
-    await channel.enableBot();
+    await channel.enableHandler('lingual');
     return data({ ok: 'enabled' as const });
   }
   if (intent === 'disable') {
-    await channel.disableBot();
+    await channel.disableHandler('lingual');
     return data({ ok: 'disabled' as const });
   }
   if (intent === 'settings') {
@@ -156,7 +159,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       .map((login) => login.trim())
       .filter((login) => login.length > 0 && login.length < 64)
       .slice(0, MAX_IGNORED_CHATTERS);
-    await channel.setLingualSettings({
+    using lingual = await channel.lingual();
+    await lingual.setSettings({
       language: resolved.name,
       ignoredChatters,
     });

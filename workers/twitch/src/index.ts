@@ -1,12 +1,15 @@
 /**
  * pvtch Twitch Worker (twitch.pvtch.com)
  *
- * Receives EventSub webhooks, queues them, and runs the Lingual chat bot from
- * the queue consumer. User-facing settings live on www (pvtch).
+ * pvtch's Twitch platform layer. Receives EventSub webhooks and queues them;
+ * the queue consumer routes events to handler workers (e.g. pvtch-lingual),
+ * syncs subscriptions, and posts handlers' replies to chat. User-facing
+ * settings live on www (pvtch).
  */
 import { consume } from './consumer';
 import { handleEventSub } from './eventsub/webhook';
 import { adminBootstrap } from './routes/admin-bootstrap';
+import { adminFlags } from './routes/admin-flags';
 import { adminStatus } from './routes/admin-status';
 import { botAuthorize, botCallback } from './routes/bot-authorize';
 
@@ -28,6 +31,10 @@ export default {
       case 'GET /admin/bootstrap':
       case 'POST /admin/bootstrap': {
         return adminBootstrap(request, env);
+      }
+      case 'GET /admin/flags':
+      case 'POST /admin/flags': {
+        return adminFlags(request, env);
       }
       case 'GET /admin/status': {
         return adminStatus(request, env);

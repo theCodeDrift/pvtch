@@ -10,9 +10,12 @@
   "exports": {
     "./known-bots": "./src/known-bots.ts",
     "./languages": "./src/languages.ts",
+    "./queue-outcome": "./src/queue-outcome.ts",
     "./secrets": "./src/secrets.ts",
     "./supported-languages": "./src/supported-languages.ts",
-    "./twitch-queue": "./src/twitch-queue.ts"
+    "./twitch-eventsub": "./src/twitch-eventsub.ts",
+    "./twitch-queue": "./src/twitch-queue.ts",
+    "./twitch-registry": "./src/twitch-registry.ts"
   },
   "private": true,
   "scripts": {

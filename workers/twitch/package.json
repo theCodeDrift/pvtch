@@ -2,8 +2,6 @@
   "name": "@pvtch/twitch",
   "dependencies": {
     "@pvtch/shared": "workspace:*",
-    "franc-min": "^6.2.0",
-    "tinyld": "^1.3.4",
     "zod": "^4.2.1"
   },
   "devDependencies": {

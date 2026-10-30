@@ -1,17 +1,19 @@
 import { readSecret } from '@pvtch/shared/secrets';
 import type { TwitchEventMessage } from '@pvtch/shared/twitch-queue';
+import { senderForUserId } from '@pvtch/shared/twitch-registry';
 import { z } from 'zod';
 
-import { channelStub } from '../channel';
+import { channelStub, disableSenderHandlers } from '../channel';
 import {
   EVENTSUB_HEADERS,
   notificationBody,
   revocationBody,
   verificationBody,
+  type EventSubSubscription,
 } from './schemas';
 import { isFresh, verifySignature } from './verify';
 
-/** Revocation statuses meaning the broadcaster no longer allows the bot. */
+/** Revocation statuses meaning the broadcaster no longer allows the sender. */
 const AUTHORIZATION_LOST = new Set(['authorization_revoked', 'user_removed']);
 
 const forbidden = () => new Response(undefined, { status: 403 });
@@ -21,7 +23,7 @@ const noContent = () => new Response(undefined, { status: 204 });
  * POST /eventsub. Verifies the signature and age before anything else, then:
  * answers the callback challenge and handles revocations inline (both are
  * cheap and the challenge must be in the response), and queues notifications
- * so Twitch gets its 2xx without waiting on translation.
+ * so Twitch gets its 2xx without waiting on routing or handlers.
  */
 export async function handleEventSub(
   request: Request,
@@ -57,6 +59,34 @@ export async function handleEventSub(
   }
 }
 
+/**
+ * The channel and sender a per-sender subscription belongs to, or undefined
+ * for app-level subscriptions and accounts that aren't registered senders.
+ */
+function subscriptionOwner(subscription: EventSubSubscription) {
+  const broadcasterId = subscription.condition.broadcaster_user_id;
+  const userId = subscription.condition.user_id;
+  if (!broadcasterId || !userId) return;
+  const senderId = senderForUserId(userId);
+  if (!senderId) {
+    console.warn('EventSub subscription for an unregistered sender', {
+      type: subscription.type,
+      userId,
+    });
+    return;
+  }
+  return { broadcasterId, senderId };
+}
+
+/** Twitch's condition with absent values dropped, as the queue carries it. */
+function conditionOf(subscription: EventSubSubscription) {
+  return Object.fromEntries(
+    Object.entries(subscription.condition).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
+  );
+}
+
 async function dispatch(
   env: Env,
   messageType: string,
@@ -69,9 +99,10 @@ async function dispatch(
   switch (messageType) {
     case 'webhook_callback_verification': {
       const { challenge, subscription } = verificationBody.parse(json);
-      const broadcasterId = subscription.condition.broadcaster_user_id;
-      if (broadcasterId) {
-        await channelStub(env, broadcasterId).setSubscription(
+      const owner = subscriptionOwner(subscription);
+      if (owner) {
+        await channelStub(env, owner.broadcasterId).setSubscription(
+          owner.senderId,
           subscription.type,
           subscription.id,
           'enabled'
@@ -85,17 +116,19 @@ async function dispatch(
 
     case 'revocation': {
       const { subscription } = revocationBody.parse(json);
-      const broadcasterId = subscription.condition.broadcaster_user_id;
       console.warn('EventSub subscription revoked', {
         type: subscription.type,
         status: subscription.status,
-        broadcasterId,
+        condition: subscription.condition,
       });
-      if (broadcasterId) {
-        const channel = channelStub(env, broadcasterId);
-        await channel.clearSubscription(subscription.type);
+      const owner = subscriptionOwner(subscription);
+      if (owner) {
+        await channelStub(env, owner.broadcasterId).clearSubscription(
+          owner.senderId,
+          subscription.type
+        );
         if (AUTHORIZATION_LOST.has(subscription.status)) {
-          await channel.disableBot();
+          await disableSenderHandlers(env, owner.broadcasterId, owner.senderId);
         }
       }
       return noContent();
@@ -107,6 +140,7 @@ async function dispatch(
         kind: 'event',
         messageId,
         subscriptionType: subscription.type,
+        condition: conditionOf(subscription),
         timestamp: Date.parse(timestamp),
         event,
       };

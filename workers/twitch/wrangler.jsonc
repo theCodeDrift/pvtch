@@ -1,15 +1,17 @@
 /**
  * pvtch Twitch Worker
  *
- * EventSub webhook endpoint and the Lingual chat bot, on twitch.pvtch.com.
+ * pvtch's Twitch platform layer on twitch.pvtch.com: the EventSub webhook,
+ * the router that fans events out to handler queues, subscription sync, and
+ * chat sends. Bot accounts are registered in @pvtch/shared/twitch-registry.
  * Serves no user-facing pages: settings live on www (pvtch).
  *
  * Secrets come from the account Secrets Store (secrets_store_secrets below):
  *   TWITCH_SECRET           Twitch app client secret (shared with pvtch)
  *   TWITCH_EVENTSUB_SECRET  EventSub webhook signing secret (10-100 chars)
  *
- * Deploy order: pvtch-storage first (TWITCH_CHANNEL). The twitch-events
- * queues must exist.
+ * Deploy order: pvtch-storage first (TWITCH_CHANNEL). The twitch-events and
+ * every handler queue (lingual-events) must exist.
  */
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
@@ -32,8 +34,6 @@
 
   "vars": {
     "TWITCH_CLIENT_ID": "yrx2abngfobvh0zhgdwgwbr5yzbqop",
-    // The pvtch chat bot account (login: botlingual).
-    "TWITCH_BOT_USER_ID": "1591556954",
     "TWITCH_APP_URL": "https://twitch.pvtch.com",
     "PVTCH_APP_URL": "https://www.pvtch.com",
     // Comma-separated Twitch logins allowed on /bot/* and /admin/*. Empty
@@ -76,10 +76,6 @@
     },
   ],
 
-  "ai": {
-    "binding": "AI",
-  },
-
   "durable_objects": {
     "bindings": [
       {
@@ -100,6 +96,12 @@
       {
         "queue": "twitch-events",
         "binding": "TWITCH_EVENTS",
+      },
+      // One producer per handler queue in @pvtch/shared/twitch-registry; the
+      // router fans routed events out to these.
+      {
+        "queue": "lingual-events",
+        "binding": "LINGUAL_EVENTS",
       },
     ],
     "consumers": [

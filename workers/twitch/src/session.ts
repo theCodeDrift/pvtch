@@ -1,3 +1,5 @@
+import { TWITCH_SENDERS, type SenderId } from '@pvtch/shared/twitch-registry';
+
 const TOKEN_PREFIX = 'token-data-';
 const TWITCH_DATA_PREFIX = 'twitch-data-';
 
@@ -47,15 +49,16 @@ export function isAdmin(env: Env, user: SessionUser | undefined): boolean {
 }
 
 /**
- * /bot/* routes also admit the bot account itself, so it can log into www and
- * grant its own scopes without juggling two Twitch logins. The callback still
- * rejects any authorizing account other than the bot.
+ * /bot/* routes also admit the sender's bot account itself, so it can log
+ * into www and grant its own scopes without juggling two Twitch logins. The
+ * callback still rejects any authorizing account other than that sender.
  */
-export function canAuthorizeBot(
+export function canAuthorizeSender(
   env: Env,
-  user: SessionUser | undefined
+  user: SessionUser | undefined,
+  senderId: SenderId
 ): boolean {
-  return isAdmin(env, user) || user?.id === env.TWITCH_BOT_USER_ID;
+  return isAdmin(env, user) || user?.id === TWITCH_SENDERS[senderId].userId;
 }
 
 export { readCookie };

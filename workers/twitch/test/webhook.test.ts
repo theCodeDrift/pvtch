@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { handleEventSub } from '../src/eventsub/webhook';
 import {
   fetchWorker,
+  BOT_ID,
   BROADCASTER_ID,
   createTestEnv,
   sign,
@@ -17,7 +18,7 @@ function subscription(overrides: Record<string, unknown> = {}) {
     status: 'enabled',
     type: 'channel.chat.message',
     version: '1',
-    condition: { broadcaster_user_id: BROADCASTER_ID, user_id: 'bot-1' },
+    condition: { broadcaster_user_id: BROADCASTER_ID, user_id: BOT_ID },
     ...overrides,
   };
 }
@@ -54,6 +55,7 @@ describe('POST /eventsub', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('rejects a bad signature without enqueueing', async () => {
@@ -119,14 +121,40 @@ describe('POST /eventsub', () => {
     expect(response.headers.get('Content-Type')).toBe('text/plain');
     expect(await response.text()).toBe('abc123');
     expect(
-      t.channel(BROADCASTER_ID).getSubscription('channel.chat.message')
+      t
+        .channel(BROADCASTER_ID)
+        .getSubscription('botlingual', 'channel.chat.message')
     ).toMatchObject({ subscriptionId: 'sub-1', status: 'enabled' });
   });
 
-  it('disables the bot when the broadcaster revokes authorization', async () => {
+  it('records nothing for a subscription of an unregistered sender', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const body = JSON.stringify({
+      challenge: 'abc123',
+      subscription: subscription({
+        condition: { broadcaster_user_id: BROADCASTER_ID, user_id: '999' },
+      }),
+    });
+
+    const response = await handleEventSub(
+      eventSubRequest('webhook_callback_verification', body),
+      t.env
+    );
+
+    expect(await response.text()).toBe('abc123');
+    expect(t.channel(BROADCASTER_ID).subscriptions.size).toBe(0);
+  });
+
+  it("disables the sender's handlers when the broadcaster revokes authorization", async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const channel = t.channel(BROADCASTER_ID);
-    channel.enabled = true;
-    channel.setSubscription('channel.chat.message', 'sub-1', 'enabled');
+    channel.enableHandler('lingual');
+    channel.setSubscription(
+      'botlingual',
+      'channel.chat.message',
+      'sub-1',
+      'enabled'
+    );
     const body = JSON.stringify({
       subscription: subscription({ status: 'authorization_revoked' }),
     });
@@ -137,22 +165,32 @@ describe('POST /eventsub', () => {
     );
 
     expect(response.status).toBe(204);
-    expect(channel.getSubscription('channel.chat.message')).toBeNull();
-    expect(channel.enabled).toBe(false);
+    expect(
+      channel.getSubscription('botlingual', 'channel.chat.message')
+    ).toBeNull();
+    expect(channel.listHandlers()).toEqual([]);
   });
 
-  it('keeps the bot enabled when delivery failures revoke the subscription', async () => {
+  it('keeps handlers enabled when delivery failures revoke the subscription', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const channel = t.channel(BROADCASTER_ID);
-    channel.enabled = true;
-    channel.setSubscription('channel.chat.message', 'sub-1', 'enabled');
+    channel.enableHandler('lingual');
+    channel.setSubscription(
+      'botlingual',
+      'channel.chat.message',
+      'sub-1',
+      'enabled'
+    );
     const body = JSON.stringify({
       subscription: subscription({ status: 'notification_failures_exceeded' }),
     });
 
     await handleEventSub(eventSubRequest('revocation', body), t.env);
 
-    expect(channel.getSubscription('channel.chat.message')).toBeNull();
-    expect(channel.enabled).toBe(true);
+    expect(
+      channel.getSubscription('botlingual', 'channel.chat.message')
+    ).toBeNull();
+    expect(channel.listHandlers()).toEqual(['lingual']);
   });
 
   it('enqueues a notification and returns 204', async () => {
@@ -169,6 +207,7 @@ describe('POST /eventsub', () => {
       kind: 'event',
       messageId: 'm-42',
       subscriptionType: 'channel.chat.message',
+      condition: { broadcaster_user_id: BROADCASTER_ID, user_id: BOT_ID },
       timestamp: NOW.getTime(),
       event,
     });
