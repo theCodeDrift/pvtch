@@ -1,3 +1,9 @@
+import {
+  HANDLER_IDS,
+  SENDER_IDS,
+  TWITCH_SENDERS,
+} from '@pvtch/shared/twitch-registry';
+
 import { channelStub } from '../channel';
 import { getSessionUser, isAdmin } from '../session';
 import { helix } from '../twitch/helix';
@@ -5,8 +11,9 @@ import { helix } from '../twitch/helix';
 /**
  * GET /admin/status: read-only diagnostics. Shows the app's EventSub
  * subscriptions as Twitch reports them, next to what the admin's own
- * TwitchChannel has recorded. Pass `?broadcaster=<user id>` for another
- * channel.
+ * TwitchChannel has recorded: each handler's state, each sender's
+ * subscriptions and send tier, Lingual's settings, and the flags. Pass
+ * `?broadcaster=<user id>` for another channel.
  */
 export async function adminStatus(
   request: Request,
@@ -22,17 +29,38 @@ export async function adminStatus(
   const channel = channelStub(env, broadcasterId);
 
   const twitch = await helix(env, '/eventsub/subscriptions');
-  const [bot, chatSubscription, lingual] = await Promise.all([
-    channel.getBot(),
-    channel.getSubscription('channel.chat.message'),
-    channel.getLingualSettings(),
+  using lingual = await channel.lingual();
+  using flags = await channel.flags();
+  const [handlers, senders, lingualSettings, flagList] = await Promise.all([
+    Promise.all(
+      HANDLER_IDS.map(async (id) => [id, await channel.getHandler(id)] as const)
+    ),
+    Promise.all(
+      SENDER_IDS.map(
+        async (id) =>
+          [
+            id,
+            {
+              userId: TWITCH_SENDERS[id].userId,
+              tier: await channel.getSendTier(id),
+              subscriptions: await channel.listSubscriptions(id),
+            },
+          ] as const
+      )
+    ),
+    lingual.getSettings(),
+    flags.list(),
   ]);
 
   return Response.json(
     {
       broadcasterId,
-      botUserId: env.TWITCH_BOT_USER_ID,
-      channel: { bot, chatSubscription, lingual },
+      channel: {
+        handlers: Object.fromEntries(handlers),
+        senders: Object.fromEntries(senders),
+        lingual: lingualSettings,
+        flags: flagList,
+      },
       twitch: {
         status: twitch.status,
         body: await twitch.json(),

@@ -44,26 +44,38 @@ describe('admin routes', () => {
   });
 
   it('refuses /bot/authorize without a session', async () => {
-    const response = await fetchWorker(get('/bot/authorize'), t.env);
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual'),
+      t.env
+    );
     expect(response.status).toBe(403);
   });
 
   it('refuses /bot/authorize for a logged-in non-admin', async () => {
     const cookie = await login(t, 'viewer');
-    const response = await fetchWorker(get('/bot/authorize', cookie), t.env);
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual', cookie),
+      t.env
+    );
     expect(response.status).toBe(403);
   });
 
   it('refuses everyone when ADMIN_USERS is empty', async () => {
     const cookie = await login(t, 'admin_user');
     const env = { ...t.env, ADMIN_USERS: '' } as unknown as Env;
-    const response = await fetchWorker(get('/bot/authorize', cookie), env);
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual', cookie),
+      env
+    );
     expect(response.status).toBe(403);
   });
 
   it('sends an admin to Twitch for the bot scopes', async () => {
     const cookie = await login(t, 'admin_user');
-    const response = await fetchWorker(get('/bot/authorize', cookie), t.env);
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual', cookie),
+      t.env
+    );
 
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get('Location') ?? '');
@@ -77,8 +89,32 @@ describe('admin routes', () => {
 
   it('sends the bot account itself to Twitch without being an admin', async () => {
     const cookie = await loginAsBot(t);
-    const response = await fetchWorker(get('/bot/authorize', cookie), t.env);
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual', cookie),
+      t.env
+    );
     expect(response.status).toBe(302);
+  });
+
+  it('rejects /bot/authorize for an unknown sender', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=nope', cookie),
+      t.env
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it('carries the sender through the OAuth state', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      get('/bot/authorize?sender=botlingual', cookie),
+      t.env
+    );
+    const state = new URL(
+      response.headers.get('Location') ?? ''
+    ).searchParams.get('state');
+    expect(state).toMatch(/\.botlingual$/);
   });
 
   it('rejects a callback whose state does not match', async () => {
@@ -104,7 +140,10 @@ describe('admin routes', () => {
     );
 
     const response = await fetchWorker(
-      get('/bot/callback?code=c&state=s', `${cookie}; pvtch_bot_state=s`),
+      get(
+        '/bot/callback?code=c&state=s.botlingual',
+        `${cookie}; pvtch_bot_state=s.botlingual`
+      ),
       t.env
     );
 
@@ -125,7 +164,10 @@ describe('admin routes', () => {
     );
 
     const response = await fetchWorker(
-      get('/bot/callback?code=c&state=s', `${cookie}; pvtch_bot_state=s`),
+      get(
+        '/bot/callback?code=c&state=s.botlingual',
+        `${cookie}; pvtch_bot_state=s.botlingual`
+      ),
       t.env
     );
 
@@ -154,6 +196,52 @@ describe('admin routes', () => {
       t.env
     );
     expect(response.status).toBe(403);
+  });
+
+  it('refuses /admin/flags for a non-admin', async () => {
+    const cookie = await login(t, 'viewer');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(403);
+    expect(t.channel(`id-viewer`).flagSet.size).toBe(0);
+  });
+
+  it("turns a flag on for the admin's channel", async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: new URLSearchParams({
+          name: 'lingual.reply-threading',
+          on: 'true',
+        }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(200);
+    expect([...t.channel('id-admin_user').flagSet]).toEqual([
+      'lingual.reply-threading',
+    ]);
+  });
+
+  it('rejects a flag for an unknown handler', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: new URLSearchParams({ name: 'unknown.thing', on: 'true' }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(400);
   });
 
   it('refuses /admin/status for a non-admin', async () => {
