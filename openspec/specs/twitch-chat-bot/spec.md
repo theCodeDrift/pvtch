@@ -20,93 +20,90 @@ The twitch worker SHALL obtain a Twitch app access token via the client-credenti
 - **WHEN** a Helix call returns 401
 - **THEN** a new token is fetched, the cache is replaced, and the call is retried once
 
-### Requirement: Subscribe on enable
-
-When the consumer receives `{ kind: 'subscribe', broadcasterId }`, it SHALL create a `channel.chat.message` v1 webhook subscription with condition `{ broadcaster_user_id: broadcasterId, user_id: TWITCH_BOT_USER_ID }`, callback `https://twitch.pvtch.com/eventsub`, and secret `TWITCH_EVENTSUB_SECRET`, then record it via `setSubscription('channel.chat.message', id, status)`. If Twitch returns 409 (already exists), it SHALL look up the existing subscription and record it. If Twitch returns 403 (missing `channel:bot` or bot not authorized), it SHALL call `disableBot()` and ack.
-
-#### Scenario: Successful subscribe
-
-- **WHEN** a subscribe message is consumed for an enabled channel
-- **THEN** a subscription is created and its id is stored with status `webhook_callback_verification_pending`
-
-#### Scenario: Missing authorization
-
-- **WHEN** Twitch responds 403 to the create call
-- **THEN** the bot is disabled for that channel and the message is acked
-
-### Requirement: Unsubscribe on disable
-
-When the consumer receives `{ kind: 'unsubscribe', broadcasterId }`, it SHALL delete the stored `channel.chat.message` subscription via Helix (treating 404 as success) and call `clearSubscription('channel.chat.message')`.
-
-#### Scenario: Disable bot
-
-- **WHEN** an unsubscribe message is consumed for a channel with a stored subscription
-- **THEN** the Helix subscription is deleted and the record cleared
-
 ### Requirement: Periodic reconcile
 
-When the consumer receives `{ kind: 'reconcile', broadcasterId }`: if the bot is disabled it SHALL ensure no subscription exists (as unsubscribe); if enabled and the stored subscription is missing, or Helix (`GET /eventsub/subscriptions?subscription_id=`) reports it absent or in any status other than `enabled` / `webhook_callback_verification_pending`, it SHALL perform the subscribe flow.
+When `pvtch-twitch` consumes `{ kind: 'sync', broadcasterId, senderId }`, it SHALL compute the desired subscription types as the union of `eventTypes` over the channel's enabled handlers (`listHandlers()`) whose registry `sender` is `senderId`. For each desired type whose stored subscription is missing, or which Helix (`GET /eventsub/subscriptions?subscription_id=`) reports absent or in any status other than `enabled` / `webhook_callback_verification_pending`, it SHALL create a v1 webhook subscription with condition `{ broadcaster_user_id: broadcasterId, user_id: TWITCH_SENDERS[senderId].userId }`, callback `https://twitch.pvtch.com/eventsub`, and secret `TWITCH_EVENTSUB_SECRET`, and record it via `setSubscription(senderId, type, id, status)`. On 409 it SHALL look up the existing subscription and record it; on 403 it SHALL disable every handler using `senderId` and ack. For each stored type that is no longer desired, it SHALL delete the subscription via Helix (treating 404 as success) and call `clearSubscription(senderId, type)`.
+
+#### Scenario: Handler enabled
+
+- **WHEN** a sync for `botlingual` runs on a channel where `lingual` was just enabled
+- **THEN** a `channel.chat.message` subscription for botlingual is created and recorded with status `webhook_callback_verification_pending`
+
+#### Scenario: Handler disabled
+
+- **WHEN** a sync for `botlingual` runs on a channel where no handler using botlingual is enabled
+- **THEN** the stored subscriptions are deleted via Helix and their records cleared
 
 #### Scenario: Recover revoked subscription
 
-- **WHEN** reconcile runs for an enabled channel whose subscription was revoked for `notification_failures_exceeded`
+- **WHEN** a sync runs for a channel with `lingual` enabled whose subscription was revoked for `notification_failures_exceeded`
 - **THEN** a new subscription is created and recorded
 
 #### Scenario: Healthy subscription
 
-- **WHEN** reconcile runs and Helix reports the stored subscription `enabled`
+- **WHEN** a sync runs and Helix reports the stored subscription `enabled`
 - **THEN** no Helix write occurs
+
+#### Scenario: Missing authorization
+
+- **WHEN** Twitch responds 403 to the create call
+- **THEN** every handler using that sender is disabled on the channel and the message is acked
 
 ### Requirement: App-level authorization revoke subscription
 
-The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscription with condition `{ client_id: TWITCH_CLIENT_ID }`, created via `POST /admin/bootstrap` (restricted to sessions whose login is in `ADMIN_USERS`; empty allows no one). On a `user.authorization.revoke` event the consumer SHALL call `disableBot()` on that user's `TwitchChannel` (which enqueues `unsubscribe`) and clear `scopes` on the user's `twitch-data-{userId}` record in `PVTCH_ACCOUNTS`.
+The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscription with condition `{ client_id: TWITCH_CLIENT_ID }`, created via `POST /admin/bootstrap` (restricted to sessions whose login is in `ADMIN_USERS`; empty allows no one). It is a channel-level event type handled in `pvtch-twitch`. Its handler SHALL call `disableHandler` on that user's `TwitchChannel` for every handler `routeEvent` returns (each schedules a sync that removes its subscriptions) and clear `scopes` on the user's `twitch-data-{userId}` record in `PVTCH_ACCOUNTS`.
 
 #### Scenario: Streamer disconnects pvtch
 
-- **WHEN** a `user.authorization.revoke` event arrives for user `123`
-- **THEN** `TwitchChannel(twitch:123)` bot is disabled and an unsubscribe is enqueued
+- **WHEN** a `user.authorization.revoke` event arrives for user `123` with `lingual` enabled
+- **THEN** `TwitchChannel(twitch:123)` has `lingual` disabled and a sync for `botlingual` is enqueued
 
 ### Requirement: Event filtering and loop prevention
 
-For each `channel.chat.message` event the consumer SHALL skip without sending when any of: the bot is disabled for the channel; `chatter_user_id` equals `TWITCH_BOT_USER_ID`; `chatter_user_login` is in `knownBots` or the channel's Lingual `ignoredChatters` (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`.
+The router SHALL NOT fan out a `channel.chat.message` whose `chatter_user_id` is any registered sender's `userId`, so no handler ever sees a pvtch bot's own message. Content filters (known bots, ignored chatters, commands, Shared Chat) SHALL be applied by the handler worker that owns the feature.
 
 #### Scenario: Bot's own message
 
-- **WHEN** an event's `chatter_user_id` is the pvtch bot
-- **THEN** no translation or send occurs
+- **WHEN** an event's `chatter_user_id` is botlingual
+- **THEN** no handler message is sent
+
+#### Scenario: Another pvtch bot's message
+
+- **WHEN** an event's `chatter_user_id` is any registered sender
+- **THEN** no handler message is sent
 
 ### Requirement: Send tier follows the bot's moderator status
 
-When the consumer receives a `channel.chat.message` event whose `chatter_user_id` equals `TWITCH_BOT_USER_ID`, it SHALL inspect the event's `badges` before skipping it, and call `setSendTier('moderator')` if a badge with `set_id` of `moderator`, `lead_moderator`, or `broadcaster` is present, otherwise `setSendTier('standard')`. No bot user token or additional scope SHALL be required.
+When the router consumes a `channel.chat.message` whose `chatter_user_id` equals the `userId` of the subscription's own sender, it SHALL inspect the event's `badges` before dropping it, and call `setSendTier(senderId, 'moderator')` if a badge with `set_id` of `moderator`, `lead_moderator`, or `broadcaster` is present, otherwise `setSendTier(senderId, 'standard')`. No bot user token or additional scope SHALL be required.
 
 #### Scenario: Bot is modded
 
-- **WHEN** the bot's own reply arrives as an event with a `moderator` badge
-- **THEN** the channel's send tier becomes `moderator`
+- **WHEN** botlingual's own reply arrives as an event with a `moderator` badge
+- **THEN** botlingual's send tier on that channel becomes `moderator`
 
 #### Scenario: Bot is unmodded
 
-- **WHEN** the bot's own reply arrives with no moderator badge on a channel whose tier is `moderator`
-- **THEN** the channel's send tier becomes `standard`
-
-#### Scenario: Shared Chat message from another channel
-
-- **WHEN** an event has `source_broadcaster_user_id: "999"` and `broadcaster_user_id: "123"`
-- **THEN** no translation or send occurs
+- **WHEN** botlingual's own reply arrives with no moderator badge on a channel whose botlingual tier is `moderator`
+- **THEN** botlingual's send tier becomes `standard`
 
 ### Requirement: Rate-limited reply sending
 
-To reply, the consumer SHALL: (1) skip if the event `timestamp` is more than 60 seconds old; (2) call `acquireSendSlot()` and, on `{ ok: false, retryAfterMs }`, retry the queue message with `delaySeconds = ceil(retryAfterMs / 1000)`; (3) call `POST /helix/chat/messages` with `broadcaster_id`, `sender_id: TWITCH_BOT_USER_ID`, `message`, and `reply_parent_message_id` set to the event's `message_id`. On HTTP 429 it SHALL retry the queue message with delay derived from the `Ratelimit-Reset` header; on 5xx it SHALL retry with default backoff; on 403 it SHALL call `disableBot()` and ack; on 200 with `is_sent: false` it SHALL log `drop_reason.code` and ack without retry.
+When `pvtch-twitch` consumes `{ kind: 'send', sendId, broadcasterId, senderId, handlerId, message, replyParentMessageId, timestamp }`, it SHALL: (1) ack without sending if `timestamp` is more than 60 seconds old; (2) call `acquireSendSlot(senderId, claimKey)` with `claimKey` `send:<sendId>` on the first attempt and `null` on retries, ack without sending on `{ ok: false, duplicate: true }`, and on `{ ok: false, retryAfterMs }` retry the queue message with `delaySeconds = ceil(retryAfterMs / 1000)`; (3) call `POST /helix/chat/messages` with `broadcaster_id`, `sender_id: TWITCH_SENDERS[senderId].userId`, `message`, and `reply_parent_message_id`. On HTTP 429 it SHALL retry with delay derived from the `Ratelimit-Reset` header; on 5xx it SHALL retry with default backoff; on 403 it SHALL disable every handler using `senderId` and ack; on 200 with `is_sent: false` it SHALL log `drop_reason.code` with the `handlerId` and ack without retry.
 
 #### Scenario: Successful reply
 
-- **WHEN** a translation is produced and a send slot is available
-- **THEN** a threaded reply is posted and the queue message acked
+- **WHEN** a `send` request is consumed and a slot is available
+- **THEN** a threaded reply is posted as botlingual and the queue message acked
 
 #### Scenario: Local bucket empty
 
-- **WHEN** `acquireSendSlot()` returns `{ ok: false, retryAfterMs: 1500 }`
+- **WHEN** `acquireSendSlot` returns `{ ok: false, retryAfterMs: 1500 }`
 - **THEN** the queue message is retried with `delaySeconds: 2` and Helix is not called
+
+#### Scenario: Duplicate send request
+
+- **WHEN** the same `send` (same `sendId`) is delivered twice as a first attempt
+- **THEN** Helix is called once and the duplicate is acked
 
 #### Scenario: Helix rate limited
 
@@ -120,5 +117,5 @@ To reply, the consumer SHALL: (1) skip if the event `timestamp` is more than 60 
 
 #### Scenario: Stale after retries
 
-- **WHEN** a retried message is consumed more than 60 seconds after the original chat message
+- **WHEN** a `send` is consumed more than 60 seconds after the source chat message
 - **THEN** it is acked without sending

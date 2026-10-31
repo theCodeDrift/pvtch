@@ -46,6 +46,6 @@
 ## 6. Verify and ship
 
 - [x] 6.1 Run `pnpm typecheck`, `pnpm lint` and `pnpm test`.
-- [ ] 6.2 Merge. CI deploys storage, then twitch, lingual and core.
-- [ ] 6.3 Re-enable Lingual and re-enter its settings. In `/admin/status`, check that `lingual` is enabled and botlingual's subscription is `enabled`. Chat a non-target-language line and get a threaded reply.
-- [ ] 6.4 Turn a test flag on with `/admin/flags`, confirm it shows on handler messages (log it in `pvtch-lingual`), then turn it off.
+- [x] 6.2 Merge. CI deploys storage, then twitch, lingual and core.
+- [x] 6.3 Re-enable Lingual and re-enter its settings. In `/admin/status`, check that `lingual` is enabled and botlingual's subscription is `enabled`. Chat a non-target-language line and get a threaded reply.
+- [x] 6.4 Turn a test flag on with `/admin/flags`, confirm it shows on handler messages (log it in `pvtch-lingual`), then turn it off.
