@@ -6,6 +6,7 @@ import {
 } from '@pvtch/shared/twitch-registry';
 import { z } from 'zod';
 
+import { escapeHtml, htmlPage } from '../html';
 import { canAuthorizeSender, getSessionUser, readCookie } from '../session';
 
 const BOT_SCOPES = 'user:bot user:read:chat user:write:chat';
@@ -18,11 +19,9 @@ function redirectUri(env: Env): string {
   return `${env.TWITCH_APP_URL}/bot/callback`;
 }
 
+/** `message` may carry Twitch's `?error=`, so it's escaped. */
 function page(status: number, message: string): Response {
-  return new Response(
-    `<!doctype html><meta charset="utf-8"><title>pvtch bot</title><p>${message}</p>`,
-    { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-  );
+  return htmlPage('pvtch bot', `<p>${escapeHtml(message)}</p>`, status);
 }
 
 /**
