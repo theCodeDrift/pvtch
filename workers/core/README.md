@@ -120,9 +120,9 @@ Users authenticate via Twitch OAuth. The flow:
 2. Redirected to `/auth/start` which redirects to Twitch
 3. After approval, Twitch redirects to `/auth/callback`
 4. Callback exchanges code for tokens, creates/updates user record
-5. Sets `pvtch_token` cookie and redirects to app
+5. Sets the `pvtch_token` and `pvtch_name` cookies and redirects to app
 
-The `pvtch_token` cookie is used to identify users for API calls. API routes validate this token against the `PVTCH_ACCOUNTS` KV namespace.
+The `pvtch_token` cookie is used to identify users for API calls. API routes validate this token against the `PVTCH_ACCOUNTS` KV namespace. It is HttpOnly, so page scripts can't read it; the header uses the readable `pvtch_name` cookie (the display name) to show who is signed in. Signing out POSTs to `/auth/logout`, which clears both.
 
 ## Durable Object Storage
 
