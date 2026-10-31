@@ -37,6 +37,19 @@ export async function getSessionUser(
 }
 
 /**
+ * Whether a state-changing request came from a twitch.pvtch.com page. The
+ * session cookie is SameSite=Lax on `Domain=pvtch.com`, so every
+ * *.pvtch.com page counts as same-site and can POST here with it; only the
+ * origin tells them apart. Browsers send `Origin` on form POSTs; a request
+ * without one falls back to `Sec-Fetch-Site`, and one with neither is refused.
+ */
+export function isSameOrigin(request: Request, env: Env): boolean {
+  const origin = request.headers.get('Origin');
+  if (origin) return origin === new URL(env.TWITCH_APP_URL).origin;
+  return request.headers.get('Sec-Fetch-Site') === 'same-origin';
+}
+
+/**
  * Admin-only routes (bot account authorization, bootstrap) require a login
  * in ADMIN_USERS. Unlike ALLOWED_USERS, an empty list allows no one.
  */

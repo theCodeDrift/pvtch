@@ -2,7 +2,7 @@ import { HANDLER_IDS, isHandlerId } from '@pvtch/shared/twitch-registry';
 
 import { channelStub } from '../channel';
 import { escapeHtml, htmlPage } from '../html';
-import { getSessionUser, isAdmin } from '../session';
+import { getSessionUser, isAdmin, isSameOrigin } from '../session';
 
 /** `<handlerId>.<feature>`, e.g. `lingual.reply-threading`. */
 const FLAG_NAME = /^([a-z][a-z0-9-]*)\.([a-z0-9][a-z0-9-]*)$/;
@@ -68,8 +68,7 @@ ${error}
  * /admin/flags: per-channel feature flags. GET lists them with a form, POST
  * (`name`, `on`) turns one on or off and redirects back to the list. Pass
  * `?broadcaster=<user id>` for another channel; it defaults to the admin's
- * own. The session cookie is SameSite=Lax, which stops other sites but not
- * other *.pvtch.com pages from POSTing here as an admin (see #11).
+ * own. POSTs must come from a twitch.pvtch.com page (`isSameOrigin`).
  */
 export async function adminFlags(
   request: Request,
@@ -95,6 +94,9 @@ export async function adminFlags(
     return htmlPage('Flags', flagsPage(broadcasterId, await flags.list()));
   }
 
+  if (!isSameOrigin(request, env)) {
+    return new Response(undefined, { status: 403 });
+  }
   const form = await request.formData();
   const nameField = form.get('name');
   const name = typeof nameField === 'string' ? nameField.trim() : '';
