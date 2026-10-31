@@ -225,10 +225,61 @@ describe('admin routes', () => {
       }),
       t.env
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe('/admin/flags');
     expect([...t.channel('id-admin_user').flagSet]).toEqual([
       'lingual.reply-threading',
     ]);
+  });
+
+  it('keeps ?broadcaster= when redirecting back to the list', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags?broadcaster=123', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe(
+      '/admin/flags?broadcaster=123'
+    );
+    expect([...t.channel('123').flagSet]).toEqual(['lingual.x']);
+  });
+
+  it('lists flags with an off button and the format hint', async () => {
+    const cookie = await login(t, 'admin_user');
+    t.channel('id-admin_user').flagSet.add('lingual.reply-threading');
+    const response = await fetchWorker(get('/admin/flags', cookie), t.env);
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(body).toContain(
+      '<input type="hidden" name="name" value="lingual.reply-threading">'
+    );
+    expect(body).toContain('<input type="hidden" name="on" value="false">');
+    expect(body).toContain('<code>lingual</code>');
+  });
+
+  it("explains a name that isn't <handler>.<feature>", async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: new URLSearchParams({ name: 'Reply Threading', on: 'true' }),
+      }),
+      t.env
+    );
+    const body = await response.text();
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Content-Type')).toContain('text/html');
+    expect(body).toContain(
+      "isn't in the &lt;handler&gt;.&lt;feature&gt; format"
+    );
+    expect(body).toContain('value="Reply Threading"');
+    expect(t.channel('id-admin_user').flagSet.size).toBe(0);
   });
 
   it('rejects a flag for an unknown handler', async () => {
@@ -242,6 +293,9 @@ describe('admin routes', () => {
       t.env
     );
     expect(response.status).toBe(400);
+    expect(await response.text()).toContain(
+      "&quot;unknown&quot; isn't a registered handler"
+    );
   });
 
   it('refuses /admin/status for a non-admin', async () => {
