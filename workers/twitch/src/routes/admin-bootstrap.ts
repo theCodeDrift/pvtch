@@ -1,10 +1,12 @@
+import { htmlPage } from '../html';
 import { getSessionUser, isAdmin } from '../session';
 import { bootstrapRevokeSubscription } from '../twitch/subscriptions';
 
 /**
  * /admin/bootstrap: GET shows a button, POST creates the app-wide
  * `user.authorization.revoke` subscription (idempotent). The session cookie
- * is SameSite=Lax, so a cross-site form can't POST here as an admin.
+ * is SameSite=Lax, which stops other sites but not other *.pvtch.com pages
+ * from POSTing here as an admin (see #11).
  */
 export async function adminBootstrap(
   request: Request,
@@ -15,10 +17,9 @@ export async function adminBootstrap(
   }
 
   if (request.method === 'GET') {
-    return new Response(
-      `<!doctype html><meta charset="utf-8"><title>Bootstrap</title>
-<form method="post"><button>Create user.authorization.revoke subscription</button></form>`,
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    return htmlPage(
+      'Bootstrap',
+      '<form method="post"><button>Create user.authorization.revoke subscription</button></form>'
     );
   }
 

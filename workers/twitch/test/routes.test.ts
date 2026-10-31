@@ -32,6 +32,14 @@ function get(path: string, cookie?: string) {
   });
 }
 
+function postFlag(cookie: string, fields: Record<string, string>, search = '') {
+  return new Request(`https://twitch.example.com/admin/flags${search}`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: new URLSearchParams(fields),
+  });
+}
+
 describe('admin routes', () => {
   let t: TestEnv;
 
@@ -115,6 +123,20 @@ describe('admin routes', () => {
       response.headers.get('Location') ?? ''
     ).searchParams.get('state');
     expect(state).toMatch(/\.botlingual$/);
+  });
+
+  it("escapes Twitch's ?error= on the callback page", async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      get(
+        '/bot/callback?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E&state=s.botlingual',
+        `${cookie}; pvtch_bot_state=s.botlingual`
+      ),
+      t.env
+    );
+    const body = await response.text();
+    expect(body).not.toContain('<script>');
+    expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
   it('rejects a callback whose state does not match', async () => {
@@ -276,7 +298,7 @@ describe('admin routes', () => {
     expect(response.status).toBe(400);
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(body).toContain(
-      "isn't in the &lt;handler&gt;.&lt;feature&gt; format"
+      'isn&#39;t in the &lt;handler&gt;.&lt;feature&gt; format'
     );
     expect(body).toContain('value="Reply Threading"');
     expect(t.channel('id-admin_user').flagSet.size).toBe(0);
@@ -294,8 +316,94 @@ describe('admin routes', () => {
     );
     expect(response.status).toBe(400);
     expect(await response.text()).toContain(
-      "&quot;unknown&quot; isn't a registered handler"
+      '&quot;unknown&quot; isn&#39;t a registered handler'
     );
+  });
+
+  it('turns a flag off from its button', async () => {
+    const cookie = await login(t, 'admin_user');
+    t.channel('id-admin_user').flagSet.add('lingual.x');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: 'lingual.x', on: 'false' }),
+      t.env
+    );
+    expect(response.status).toBe(303);
+    expect(t.channel('id-admin_user').flagSet.size).toBe(0);
+  });
+
+  it('turns off a flag whose handler is no longer registered', async () => {
+    const cookie = await login(t, 'admin_user');
+    t.channel('id-admin_user').flagSet.add('oldhandler.x');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: 'oldhandler.x', on: 'false' }),
+      t.env
+    );
+    expect(response.status).toBe(303);
+    expect(t.channel('id-admin_user').flagSet.size).toBe(0);
+  });
+
+  it('rejects an on value other than true or false', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: 'lingual.x', on: 'yes' }),
+      t.env
+    );
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('Choose on or off.');
+    expect(t.channel('id-admin_user').flagSet.size).toBe(0);
+  });
+
+  it('keeps the flag list and the off choice on a 400', async () => {
+    const cookie = await login(t, 'admin_user');
+    t.channel('id-admin_user').flagSet.add('lingual.x');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: '', on: 'false' }),
+      t.env
+    );
+    const body = await response.text();
+    expect(response.status).toBe(400);
+    expect(body).toContain('<code>lingual.x</code>');
+    expect(body).toContain('<option value="false" selected>off</option>');
+  });
+
+  it('escapes a typed name on the 400 page', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: '"><script>alert(1)</script>', on: 'true' }),
+      t.env
+    );
+    const body = await response.text();
+    expect(response.status).toBe(400);
+    expect(body).not.toContain('<script>');
+    expect(body).toContain(
+      'value="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"'
+    );
+  });
+
+  it('treats an empty ?broadcaster= as the admin’s own channel', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      postFlag(cookie, { name: 'lingual.x', on: 'true' }, '?broadcaster='),
+      t.env
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe('/admin/flags');
+    expect([...t.channel('id-admin_user').flagSet]).toEqual(['lingual.x']);
+  });
+
+  it('rejects a ?broadcaster= that is not a numeric id', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      postFlag(
+        cookie,
+        { name: 'lingual.x', on: 'true' },
+        '?broadcaster=somelogin'
+      ),
+      t.env
+    );
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('isn&#39;t a Twitch user id');
+    expect(t.channel('somelogin').flagSet.size).toBe(0);
   });
 
   it('refuses /admin/status for a non-admin', async () => {
