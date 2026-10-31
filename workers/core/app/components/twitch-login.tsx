@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import useCookie from '@/hooks/use-cookie';
+import { signOut } from '@/lib/sign-out';
 
 export function useLoginUrl() {
   const [loginUrl, setLoginUrl] = useState<string>('#');
@@ -32,20 +33,16 @@ export const TwitchLogin = ({
   isPrivate?: boolean;
   isAllowed?: boolean;
 }) => {
-  const [userToken, , removeUserToken] = useCookie('pvtch_token');
-  const [userName, , removeUserName] = useCookie('pvtch_name');
+  // pvtch_token is HttpOnly; pvtch_name is set and cleared alongside it.
+  const [userName] = useCookie('pvtch_name');
   const loginUrl = useLoginUrl();
-  const isLoggedIn = !!userToken;
+  const isLoggedIn = !!userName;
 
   const displayName = userName ? decodeURIComponent(userName) : undefined;
 
   const handleLogout = useCallback(() => {
-    removeUserToken();
-    removeUserName();
-    if (globalThis.window !== undefined) {
-      globalThis.window.location.reload();
-    }
-  }, [removeUserToken, removeUserName]);
+    void signOut();
+  }, []);
 
   if (isLoggedIn && isPrivate && !isAllowed) {
     return (

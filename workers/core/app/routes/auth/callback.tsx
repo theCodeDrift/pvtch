@@ -7,6 +7,7 @@ import {
   type TwitchUserData,
 } from '@/lib/twitch-data';
 import { createToken } from '@/lib/create-token';
+import { sessionCookies } from '@/lib/session-cookie';
 import { readSecret } from '@pvtch/shared/secrets';
 
 type TwitchTokenResponse = {
@@ -111,10 +112,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     'json'
   );
 
-  const domain = new URL(env.PVTCH_APP_URL).hostname;
-  const cookieDomain = domain === 'localhost' ? '' : `Domain=pvtch.com;`;
-  const isSecure = domain === 'localhost' ? '' : `Secure;`;
-
   if (existing) {
     await env.PVTCH_ACCOUNTS.put(
       `${tokenDataKeyPrefix}${existing.token}`,
@@ -123,14 +120,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const appUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
     const headers = new Headers();
     headers.set('Location', `${appUrl}/welcome`);
-    headers.append(
-      'Set-Cookie',
-      `pvtch_token=${existing.token}; Path=/; SameSite=Lax; ${cookieDomain} ${isSecure}`
-    );
-    headers.append(
-      'Set-Cookie',
-      `pvtch_name=${encodeURIComponent(user.display_name)}; Path=/; SameSite=Lax; ${cookieDomain} ${isSecure}`
-    );
+    for (const cookie of sessionCookies(
+      env,
+      existing.token,
+      user.display_name
+    )) {
+      headers.append('Set-Cookie', cookie);
+    }
 
     return new Response(undefined, { status: 302, headers });
   }
@@ -155,14 +151,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const newUserAppUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
   const newHeaders = new Headers();
   newHeaders.set('Location', `${newUserAppUrl}/welcome`);
-  newHeaders.append(
-    'Set-Cookie',
-    `pvtch_token=${twitchTokenData.token}; Path=/; SameSite=Lax; ${cookieDomain} ${isSecure}`
-  );
-  newHeaders.append(
-    'Set-Cookie',
-    `pvtch_name=${encodeURIComponent(twitchTokenData.display_name)}; Path=/; SameSite=Lax; ${cookieDomain} ${isSecure}`
-  );
+  for (const cookie of sessionCookies(
+    env,
+    twitchTokenData.token,
+    twitchTokenData.display_name
+  )) {
+    newHeaders.append('Set-Cookie', cookie);
+  }
 
   return new Response(undefined, { status: 302, headers: newHeaders });
 }

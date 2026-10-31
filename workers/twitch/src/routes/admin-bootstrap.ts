@@ -1,12 +1,11 @@
 import { htmlPage } from '../html';
-import { getSessionUser, isAdmin } from '../session';
+import { getSessionUser, isAdmin, isSameOrigin } from '../session';
 import { bootstrapRevokeSubscription } from '../twitch/subscriptions';
 
 /**
  * /admin/bootstrap: GET shows a button, POST creates the app-wide
- * `user.authorization.revoke` subscription (idempotent). The session cookie
- * is SameSite=Lax, which stops other sites but not other *.pvtch.com pages
- * from POSTing here as an admin (see #11).
+ * `user.authorization.revoke` subscription (idempotent). POSTs must come
+ * from a twitch.pvtch.com page (`isSameOrigin`).
  */
 export async function adminBootstrap(
   request: Request,
@@ -23,6 +22,9 @@ export async function adminBootstrap(
     );
   }
 
+  if (!isSameOrigin(request, env)) {
+    return new Response(undefined, { status: 403 });
+  }
   const result = await bootstrapRevokeSubscription(env);
   return Response.json(result, { status: result.ok ? 200 : 502 });
 }

@@ -2,26 +2,24 @@ import { Link } from 'react-router';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import useCookie from '@/hooks/use-cookie';
+import { signOut } from '@/lib/sign-out';
 
 export function meta() {
   return [{ title: 'Private Instance - PVTCH' }];
 }
 
 function SignOutButton() {
-  const [token, , removeToken] = useCookie('pvtch_token');
-  const nameHook = useCookie('pvtch_name');
-  const removeName = nameHook[2];
+  // pvtch_token is HttpOnly; pvtch_name is set and cleared alongside it.
+  const [name] = useCookie('pvtch_name');
 
-  if (!token) return;
+  if (!name) return;
 
   return (
     <Button
       variant="outline"
       className="gap-2"
       onClick={() => {
-        removeToken();
-        removeName();
-        globalThis.window?.location.reload();
+        void signOut();
       }}
     >
       <LogOut className="size-4" />

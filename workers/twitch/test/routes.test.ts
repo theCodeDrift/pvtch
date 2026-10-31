@@ -26,6 +26,8 @@ async function loginAsBot(t: TestEnv) {
   return 'pvtch_token=tok-bot';
 }
 
+const ORIGIN = 'https://twitch.example.com';
+
 function get(path: string, cookie?: string) {
   return new Request(`https://twitch.example.com${path}`, {
     headers: cookie ? { Cookie: cookie } : {},
@@ -35,7 +37,7 @@ function get(path: string, cookie?: string) {
 function postFlag(cookie: string, fields: Record<string, string>, search = '') {
   return new Request(`https://twitch.example.com/admin/flags${search}`, {
     method: 'POST',
-    headers: { Cookie: cookie },
+    headers: { Cookie: cookie, Origin: ORIGIN },
     body: new URLSearchParams(fields),
   });
 }
@@ -201,7 +203,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/bootstrap', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
       }),
       t.env
     );
@@ -213,7 +215,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/bootstrap', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
       }),
       t.env
     );
@@ -225,7 +227,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/flags', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
         body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
       }),
       t.env
@@ -239,7 +241,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/flags', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
         body: new URLSearchParams({
           name: 'lingual.reply-threading',
           on: 'true',
@@ -259,7 +261,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/flags?broadcaster=123', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
         body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
       }),
       t.env
@@ -289,7 +291,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/flags', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
         body: new URLSearchParams({ name: 'Reply Threading', on: 'true' }),
       }),
       t.env
@@ -309,7 +311,7 @@ describe('admin routes', () => {
     const response = await fetchWorker(
       new Request('https://twitch.example.com/admin/flags', {
         method: 'POST',
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, Origin: ORIGIN },
         body: new URLSearchParams({ name: 'unknown.thing', on: 'true' }),
       }),
       t.env
@@ -404,6 +406,49 @@ describe('admin routes', () => {
     expect(response.status).toBe(400);
     expect(await response.text()).toContain('isn&#39;t a Twitch user id');
     expect(t.channel('somelogin').flagSet.size).toBe(0);
+  });
+
+  it.each([
+    ['another pvtch.com subdomain', { Origin: 'https://www.example.com' }],
+    ['no Origin and a same-site fetch', { 'Sec-Fetch-Site': 'same-site' }],
+    ['no Origin or Sec-Fetch-Site', {}],
+  ])('refuses an admin flag POST from %s', async (_, headers) => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie, ...headers },
+        body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(403);
+    expect(t.channel('id-admin_user').flagSet.size).toBe(0);
+  });
+
+  it('accepts an admin flag POST marked same-origin without an Origin', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/flags', {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Sec-Fetch-Site': 'same-origin' },
+        body: new URLSearchParams({ name: 'lingual.x', on: 'true' }),
+      }),
+      t.env
+    );
+    expect(response.status).toBe(303);
+  });
+
+  it('refuses an admin bootstrap POST from another origin', async () => {
+    const cookie = await login(t, 'admin_user');
+    const response = await fetchWorker(
+      new Request('https://twitch.example.com/admin/bootstrap', {
+        method: 'POST',
+        headers: { Cookie: cookie, Origin: 'https://www.example.com' },
+      }),
+      t.env
+    );
+    expect(response.status).toBe(403);
   });
 
   it('refuses /admin/status for a non-admin', async () => {
