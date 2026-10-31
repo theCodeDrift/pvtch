@@ -1,5 +1,38 @@
 ## MODIFIED Requirements
 
+### Requirement: OAuth login initiation
+
+The system SHALL redirect users to the Twitch OAuth 2.0 authorization endpoint when they visit `/auth/start`. The redirect SHALL include `client_id`, `response_type=code`, `redirect_uri` and `state` parameters. No OAuth scopes are requested. `state` SHALL be a fresh random value, also set in a `pvtch_login_state` cookie with `Path=/auth/callback`, `HttpOnly`, `SameSite=Lax`, `Max-Age=600`, and `Secure` except on localhost.
+
+#### Scenario: User clicks login
+
+- **WHEN** a user navigates to `/auth/start`
+- **THEN** the system redirects to `https://id.twitch.tv/oauth2/authorize` with the correct query parameters, including `state`, and sets a `pvtch_login_state` cookie with the same value
+
+### Requirement: OAuth callback token exchange
+
+Before anything else, `/auth/callback` SHALL require a `state` query parameter equal to the `pvtch_login_state` cookie. Every response from the callback SHALL clear that cookie. With a matching `state`, the system SHALL exchange the authorization code for a Twitch access token by POSTing to `https://id.twitch.tv/oauth2/token` with `client_id`, `client_secret`, `code`, `grant_type=authorization_code`, and `redirect_uri`.
+
+#### Scenario: Successful token exchange
+
+- **WHEN** Twitch redirects to `/auth/callback` with a valid `code` and a `state` matching the cookie
+- **THEN** the system exchanges the code for an access token via the Twitch token endpoint
+
+#### Scenario: Missing or mismatched state
+
+- **WHEN** a request arrives at `/auth/callback` whose `state` is missing or doesn't match the `pvtch_login_state` cookie, for example a callback link an attacker made with their own `code`
+- **THEN** the system returns HTTP 400 without exchanging the code or setting a session
+
+#### Scenario: Twitch returns an error
+
+- **WHEN** Twitch redirects to `/auth/callback` with an `error` parameter and a matching `state`
+- **THEN** the system redirects to `/auth/error` with the error details as query parameters
+
+#### Scenario: Missing code parameter
+
+- **WHEN** a request arrives at `/auth/callback` with a matching `state` but without a `code` or `error` parameter
+- **THEN** the system returns HTTP 400
+
 ### Requirement: Dual KV storage
 
 The system SHALL store two entries in the `PVTCH_ACCOUNTS` KV namespace per user:
@@ -21,7 +54,7 @@ The user's `token` is their overlay key: it names their overlay and API URLs and
 
 ### Requirement: Session cookie
 
-The system SHALL set a `pvtch_token` cookie after successful authentication whose value is the new session token, never the user's `token`. The cookie SHALL use `Path=/`, `SameSite=Lax`, `HttpOnly` and `Max-Age` equal to the session TTL (30 days). The system SHALL also set a `pvtch_name` cookie holding the URL-encoded display name, with the same attributes except `HttpOnly`. In production, both SHALL include `Secure` and `Domain=pvtch.com`. After setting the cookies, the system redirects to `/welcome`.
+After successful authentication, the system SHALL set a `pvtch_token` cookie whose value is the new session token, never the user's `token`. The cookie SHALL use `Path=/`, `SameSite=Lax`, `HttpOnly` and `Max-Age` equal to the session TTL (30 days). The system SHALL also set a `pvtch_name` cookie holding the URL-encoded display name, with the same attributes except `HttpOnly`. In production, both SHALL include `Secure` and `Domain=pvtch.com`. After setting the cookies, the system redirects to `/welcome`.
 
 #### Scenario: Cookie set on login
 
@@ -40,7 +73,9 @@ The system SHALL set a `pvtch_token` cookie after successful authentication whos
 
 ### Requirement: Token validation
 
-The system SHALL provide an `isValidToken` function that looks up `token-data-{token}` in KV and returns the associated Twitch user ID, or `undefined` if the token is invalid or missing. `isValidToken` SHALL be used only for overlay and API URLs that carry the user's token; it SHALL NOT be used to resolve the `pvtch_token` cookie. Session validation SHALL be performed centrally in React Router middleware (`app/middleware/auth.ts`) instead of in individual route loaders, resolving the cookie through `resolveSession`. The middleware SHALL set `userContext` with the authenticated user's data, and `instanceAccessContext` with authorization state.
+The system SHALL provide an `isValidToken` function that looks up `token-data-{token}` in KV and returns the associated Twitch user ID, or `undefined` if the token is invalid or missing. `isValidToken` SHALL be used only for overlay and API URLs that carry the user's token. It SHALL NOT be used to resolve the `pvtch_token` cookie.
+
+Session validation SHALL be performed centrally in React Router middleware (`app/middleware/auth.ts`) instead of in individual route loaders, resolving the cookie through `resolveSession` or the localhost-only development bypass. The middleware SHALL set `userContext` with the authenticated user's data, and `instanceAccessContext` with authorization state. `userContext.token` is the user's overlay token, for building overlay URLs.
 
 #### Scenario: Valid session
 
@@ -59,21 +94,23 @@ The system SHALL provide an `isValidToken` function that looks up `token-data-{t
 
 ### Requirement: Login UI component
 
-The system SHALL provide a `TwitchLogin` component that renders a Twitch-branded login button when unauthenticated, and a logout button when authenticated. Because `pvtch_token` is HttpOnly, the component SHALL treat the user as signed in only when the readable `pvtch_name` cookie is present and the layout loader reports a resolved session. It SHALL remove a `pvtch_name` cookie that has no session. Login navigates to `/auth/start`. Logout POSTs to `/auth/logout`, which revokes the session and clears both cookies, and then reloads the page. On a private instance, when the user is logged in but not authorized, the component SHALL display an `X` icon instead of the Twitch icon, and the username SHALL link to `/private` instead of opening a dropdown.
+The system SHALL provide a `TwitchLogin` component that renders a Twitch-branded login button when unauthenticated, and a logout button when authenticated. Because `pvtch_token` is HttpOnly, the layout loader SHALL return the signed-in user's display name, or `null` when no session resolved. That value decides how `TwitchLogin` renders. When the loader reports no session and a `pvtch_name` cookie is present, the component SHALL remove that cookie in an effect.
+
+Login navigates to `/auth/start`. Logout POSTs to `/auth/logout`, which revokes the session and clears both cookies, and then reloads the page. On a private instance, when the user is logged in but not authorized, the component SHALL display an `X` icon instead of the Twitch icon, and the username SHALL link to `/private` instead of opening a dropdown.
 
 #### Scenario: Unauthenticated user
 
-- **WHEN** no `pvtch_name` cookie is present
+- **WHEN** the layout loader reports no session
 - **THEN** the component renders a purple Twitch-branded "Login With Twitch" button linking to `/auth/start`
 
 #### Scenario: Authenticated and authorized user
 
-- **WHEN** a `pvtch_name` cookie is present and the user is authorized (or the instance is open)
-- **THEN** the component renders the Twitch icon with the display name and a sign-out dropdown
+- **WHEN** the layout loader reports a session and the user is authorized (or the instance is open)
+- **THEN** the component renders the Twitch icon with the loader's display name and a sign-out dropdown
 
 #### Scenario: Authenticated but unauthorized user on private instance
 
-- **WHEN** a `pvtch_name` cookie is present but the user is not on the allow list
+- **WHEN** the layout loader reports a session but the user is not on the allow list
 - **THEN** the component renders an `X` icon with the display name as a link to `/private`
 
 #### Scenario: Name cookie without a session
@@ -81,7 +118,20 @@ The system SHALL provide a `TwitchLogin` component that renders a Twitch-branded
 - **WHEN** a `pvtch_name` cookie is present but the loader reports no session (for example, a cookie from before session records)
 - **THEN** the component renders the login button and removes `pvtch_name`
 
+#### Scenario: Session without a name cookie
+
+- **WHEN** the loader reports a session but no `pvtch_name` cookie is present
+- **THEN** the component renders signed in with the loader's display name
+
 #### Scenario: Sign out
 
 - **WHEN** the user chooses Sign out
 - **THEN** the component POSTs `/auth/logout` and reloads, and the page renders signed out
+
+## REMOVED Requirements
+
+### Requirement: Account removal
+
+**Reason**: `/auth/remove` accepted the overlay token and the public login in its body with no session, so anyone holding an overlay URL could delete the account and permanently break that user's overlay URLs. Nothing in the app calls it.
+
+**Migration**: The route is deleted. A replacement, if one is wanted, needs a resolved session and an Origin check, and is a separate change.
