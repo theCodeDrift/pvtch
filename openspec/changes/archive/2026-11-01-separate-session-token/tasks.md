@@ -72,10 +72,10 @@
   - the `DEV_TWITCH_USER_ID` note in `workers/core/.dev.vars.example` (localhost only);
   - `workers/twitch/README.md`, if it describes session lookup.
 - [x] 7.2 Run `pnpm typecheck`, `pnpm lint` and `pnpm test`.
-- [ ] 7.3 After deploy:
+- [x] 7.3 After deploy:
   1. Confirm the old cookie shows signed out.
   2. Sign in and check the header, `/admin/flags` and `/bots/lingual`.
   3. Check that an existing OBS progress source and a `/lingo/translate/<token>` URL still work.
   4. Sign out and confirm the old session cookie value no longer works.
   5. Confirm `/auth/remove` returns 404.
-- [ ] 7.4 After archiving, update the `auth` spec's Purpose, which still says "token-based sessions".
+- [x] 7.4 After archiving, update the `auth` spec's Purpose, which still says "token-based sessions".
