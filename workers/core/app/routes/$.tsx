@@ -1,3 +1,14 @@
+import { data } from 'react-router';
+
+// Unknown paths render the page below with a real 404 status, for any method.
+export function loader() {
+  return data({}, { status: 404 });
+}
+
+export function action() {
+  return data({}, { status: 404 });
+}
+
 export default function CatchAll() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
