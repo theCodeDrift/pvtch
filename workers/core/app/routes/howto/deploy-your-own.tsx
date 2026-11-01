@@ -240,6 +240,12 @@ export default function DeployYourOwn() {
               your Twitch chat. It receives Twitch EventSub webhooks on its own
               domain.
             </li>
+            <li>
+              <strong>pvtch-lingual</strong> (
+              <code className="bg-muted px-1 rounded">workers/lingual</code>,
+              optional, with pvtch-twitch) does Lingual&apos;s translating. It
+              reads chat from a queue and has no pages or domain.
+            </li>
           </ul>
           <p>
             <strong>Why separate workers?</strong> A Durable Object lives in
@@ -357,6 +363,21 @@ pnpm install`}
 wrangler login`}
           </CodeBlock>
 
+          <p>
+            Every{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/*/wrangler.jsonc
+            </code>{' '}
+            pins <code className="bg-muted px-1 rounded">account_id</code> to
+            PVTCH&apos;s own Cloudflare account, so a local wrangler command
+            can&apos;t land in the wrong account. Replace it with your account
+            id (from{' '}
+            <code className="bg-muted px-1 rounded">wrangler whoami</code>) in
+            all four files. Setting the{' '}
+            <code className="bg-muted px-1 rounded">CLOUDFLARE_ACCOUNT_ID</code>{' '}
+            environment variable also overrides it.
+          </p>
+
           <p>Create the required KV namespaces:</p>
           <CodeBlock copyable>
             {`# General storage
@@ -371,7 +392,11 @@ wrangler kv namespace create PVTCH_ACCOUNTS`}
             <code className="bg-muted px-1 rounded">
               workers/core/wrangler.jsonc
             </code>{' '}
-            with your namespace IDs:
+            with your namespace IDs, and{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/twitch/wrangler.jsonc
+            </code>{' '}
+            too if you run the chat bot:
           </p>
           <CodeBlock>
             {`"kv_namespaces": [
@@ -403,10 +428,15 @@ wrangler queues create twitch-events-dlq`}
             <code className="bg-muted px-1 rounded">
               workers/core/wrangler.jsonc
             </code>
-            :
+            . Its <code className="bg-muted px-1 rounded">routes</code> entry
+            claims <code className="bg-muted px-1 rounded">www.pvtch.com</code>{' '}
+            as a custom domain: change it to your own domain, or delete the
+            entry to use the{' '}
+            <code className="bg-muted px-1 rounded">workers.dev</code> address.
           </p>
           <CodeBlock>
-            {`"vars": {
+            {`"routes": [{ "pattern": "your-domain.com", "custom_domain": true }],
+"vars": {
   "TWITCH_CLIENT_ID": "your_twitch_client_id",
   "TWITCH_REDIRECT_URI": "https://your-domain.com/auth/callback",
   "PVTCH_APP_URL": "https://your-domain.com"
@@ -488,7 +518,8 @@ pnpm run dev`}
             {`pnpm --filter @pvtch/storage deploy
 pnpm --filter @pvtch/core deploy
 # optional: the Lingual chat bot (see below)
-pnpm --filter @pvtch/twitch deploy`}
+pnpm --filter @pvtch/twitch deploy
+pnpm --filter @pvtch/lingual deploy`}
           </CodeBlock>
           <p className="text-sm">
             Each deploy runs typechecking, linting and tests first. Later
@@ -520,9 +551,9 @@ pnpm --filter @pvtch/twitch deploy`}
           </p>
 
           <p>
-            <strong>Custom domain (optional):</strong> You can add a custom
-            domain in the Cloudflare dashboard under Workers &rarr; your worker
-            &rarr; Settings &rarr; Domains & Routes.
+            <strong>Custom domain (optional):</strong> set it in the{' '}
+            <code className="bg-muted px-1 rounded">routes</code> entry from
+            step 4, so every deploy keeps it bound to the worker.
           </p>
         </Step>
 
@@ -535,22 +566,28 @@ pnpm --filter @pvtch/twitch deploy`}
           </p>
           <ol className="list-decimal list-inside space-y-2 ml-2">
             <li>
-              Create a Twitch account for the bot and note its user id. Put it
-              in{' '}
-              <code className="bg-muted px-1 rounded">TWITCH_BOT_USER_ID</code>{' '}
-              in{' '}
+              Create a Twitch account for the bot and note its user id and
+              login. Put them in the{' '}
+              <code className="bg-muted px-1 rounded">botlingual</code> entry of{' '}
+              <code className="bg-muted px-1 rounded">TWITCH_SENDERS</code> in{' '}
+              <code className="bg-muted px-1 rounded">
+                packages/shared/src/twitch-registry.ts
+              </code>
+              , which every worker reads. In{' '}
               <code className="bg-muted px-1 rounded">
                 workers/twitch/wrangler.jsonc
               </code>
-              , and use the same{' '}
+              , use the same{' '}
               <code className="bg-muted px-1 rounded">TWITCH_CLIENT_ID</code> as
               the app. Streamers grant the bot permission to that app.
             </li>
             <li>
-              Pick a domain for the worker (the{' '}
-              <code className="bg-muted px-1 rounded">routes</code> entry and{' '}
-              <code className="bg-muted px-1 rounded">TWITCH_APP_URL</code>) and
-              add{' '}
+              Pick a domain for the worker: replace{' '}
+              <code className="bg-muted px-1 rounded">twitch.pvtch.com</code> in
+              its <code className="bg-muted px-1 rounded">routes</code> entry
+              and <code className="bg-muted px-1 rounded">TWITCH_APP_URL</code>,
+              set <code className="bg-muted px-1 rounded">PVTCH_APP_URL</code>{' '}
+              there to your site, and add{' '}
               <code className="bg-muted px-1 rounded">
                 https://YOUR_BOT_DOMAIN/bot/callback
               </code>{' '}
@@ -578,6 +615,11 @@ pnpm --filter @pvtch/twitch deploy`}
             {`wrangler secrets-store secret create YOUR_STORE_ID \\
   --name TWITCH_EVENTSUB_SECRET --scopes workers --remote
 # any random 10-100 characters`}
+          </CodeBlock>
+          <p>Create Lingual&apos;s own queues:</p>
+          <CodeBlock copyable>
+            {`wrangler queues create lingual-events
+wrangler queues create lingual-events-dlq`}
           </CodeBlock>
           <p>
             After deploying, log into Twitch and your PVTCH site{' '}

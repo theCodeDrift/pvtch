@@ -45,9 +45,11 @@ pnpm run dev
 
 ### Configuration
 
-Create the following secrets in your Cloudflare dashboard or via `wrangler secret put`:
+The Twitch client secret lives in the Cloudflare account's Secrets Store as `TWITCH_SECRET`; the chat bot also needs `TWITCH_EVENTSUB_SECRET` there.
 
-- `TWITCH_SECRET` - Your Twitch application client secret
+### Deploying your own pvtch
+
+The `wrangler.jsonc` files and `@pvtch/shared/twitch-registry` are pinned to pvtch's Cloudflare account, domains, Twitch app and bot account. A fork has to replace the `account_id`, KV namespace ids, Secrets Store `store_id`, custom domains and URL vars, Twitch client id, admin lists and bot account, and create the KV namespaces and queues. The [Deploy Your Own guide](https://www.pvtch.com/howto/deploy-your-own) ([source](workers/core/app/routes/howto/deploy-your-own.tsx)) walks through each one.
 
 ### Deploy
 
