@@ -8,19 +8,7 @@ import {
 } from '../../app/lib/scope-grant';
 import { loader as loginLoader } from '../../app/routes/auth/start';
 import type { TwitchUserData } from '../../app/lib/twitch-data';
-
-class FakeKV {
-  store = new Map<string, string>();
-  get(key: string, type?: 'json') {
-    const value = this.store.get(key);
-    if (value === undefined) return Promise.resolve(null);
-    return Promise.resolve(type === 'json' ? JSON.parse(value) : value);
-  }
-  put(key: string, value: string) {
-    this.store.set(key, value);
-    return Promise.resolve();
-  }
-}
+import { type FakeKV, signedIn } from './fake-kv';
 
 const USER: TwitchUserData = {
   id: 'u-1',
@@ -30,9 +18,7 @@ const USER: TwitchUserData = {
 };
 
 function setup(user: TwitchUserData = USER) {
-  const accounts = new FakeKV();
-  accounts.store.set('token-data-tok-1', user.id);
-  accounts.store.set(`twitch-data-${user.id}`, JSON.stringify(user));
+  const accounts = signedIn(user);
   const env = {
     TWITCH_CLIENT_ID: 'client-id',
     TWITCH_SECRET: { get: () => Promise.resolve('secret') },
@@ -43,7 +29,7 @@ function setup(user: TwitchUserData = USER) {
   return { env, accounts };
 }
 
-const SESSION = 'pvtch_token=tok-1';
+const SESSION = 'pvtch_token=s-1';
 
 function storedUser(accounts: FakeKV): TwitchUserData {
   return JSON.parse(
@@ -157,6 +143,18 @@ describe('GET /auth/grant', () => {
       );
       expect(response.status).toBe(400);
     }
+  });
+
+  it('treats the overlay token as no session', async () => {
+    const { env } = setup();
+    const response = await startGrant(
+      request(
+        '/auth/grant?scopes=channel:bot&return_to=/bots/lingual',
+        'pvtch_token=tok-1'
+      ),
+      env
+    );
+    expect(response.headers.get('Location')).toBe('/auth/start');
   });
 
   it('sends an anonymous visitor to log in first', async () => {

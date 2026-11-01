@@ -1,8 +1,13 @@
+import { resolveSession } from '@pvtch/shared/session';
+import { SESSION_COOKIE, isLocalhost, readCookie } from '@/lib/session-cookie';
+
 export type TwitchUserData = {
   id: string;
   login: string;
   display_name: string;
-  token: string; // generated string unique to the user. "secret"
+  // The overlay key: generated once, unique to the user, and part of their
+  // overlay and API URLs. Not a login; sessions live in `session-` records.
+  token: string;
   // Twitch scopes granted through /auth/grant (login itself grants none).
   // Cleared when the user revokes pvtch on Twitch.
   scopes?: string[];
@@ -42,13 +47,47 @@ export const resolveTokenUser = async (
   };
 };
 
+/**
+ * `DEV_TWITCH_USER_ID`, when set and the app runs on localhost. Every
+ * request then acts as that user. Ignored anywhere else.
+ */
+export const devUserId = (environment: Env): string | undefined =>
+  environment.DEV_TWITCH_USER_ID && isLocalhost(environment)
+    ? environment.DEV_TWITCH_USER_ID
+    : undefined;
+
+/**
+ * The signed-in user: the localhost dev user, or the account behind the
+ * session in the `pvtch_token` cookie.
+ */
+export const sessionUser = async (
+  request: Request,
+  environment: Env
+): Promise<TwitchUserData | undefined> => {
+  const developer = devUserId(environment);
+  if (!developer) {
+    return resolveSession(
+      environment.PVTCH_ACCOUNTS,
+      readCookie(request, SESSION_COOKIE)
+    );
+  }
+  const data = await environment.PVTCH_ACCOUNTS.get<TwitchUserData>(
+    `${twitchDataKeyPrefix}${developer}`,
+    'json'
+  );
+  return data ?? undefined;
+};
+
+/**
+ * Resolve the overlay token in an overlay or API URL to a Twitch user ID.
+ * Never use it for the `pvtch_token` cookie, which holds a session token.
+ */
 export const isValidToken = async (
   token: string | undefined,
   environment: Env
 ) => {
-  if (environment.DEV_TWITCH_USER_ID) {
-    return environment.DEV_TWITCH_USER_ID;
-  }
+  const developer = devUserId(environment);
+  if (developer) return developer;
 
   if (!token) return;
 

@@ -20,6 +20,7 @@ export interface TwitchUser {
   id: string;
   login: string;
   displayName: string;
+  /** The overlay key, for building overlay and API URLs. Not the session. */
   token: string;
 }
 

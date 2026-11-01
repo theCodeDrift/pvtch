@@ -117,12 +117,17 @@ Configured in `wrangler.jsonc`:
 Users authenticate via Twitch OAuth. The flow:
 
 1. User clicks "Login with Twitch" button
-2. Redirected to `/auth/start` which redirects to Twitch
-3. After approval, Twitch redirects to `/auth/callback`
+2. Redirected to `/auth/start`, which sets a `pvtch_login_state` cookie and redirects to Twitch with the same `state`
+3. After approval, Twitch redirects to `/auth/callback`, which rejects a missing or mismatched `state`
 4. Callback exchanges code for tokens, creates/updates user record
-5. Sets the `pvtch_token` and `pvtch_name` cookies and redirects to app
+5. Creates a session, sets the `pvtch_token` and `pvtch_name` cookies and redirects to app
 
-The `pvtch_token` cookie is used to identify users for API calls. API routes validate this token against the `PVTCH_ACCOUNTS` KV namespace. It is HttpOnly, so page scripts can't read it; the header uses the readable `pvtch_name` cookie (the display name) to show who is signed in. Signing out POSTs to `/auth/logout`, which clears both.
+Each user has two separate values in the `PVTCH_ACCOUNTS` KV namespace:
+
+- **Overlay key** (`token` on `twitch-data-{id}`, reverse-mapped by `token-data-{token}`): created once and never changed. It's part of the user's overlay and API URLs (`/sources/progress/:token/…`, `/progress/:token/…`, `/lingo/…/:token`), and those routes validate it with `isValidToken`. It is not a login.
+- **Session** (`session-{sessionToken}` → `{ userId, token }`, 30-day expiry): one per sign-in. The `pvtch_token` cookie holds the session token. Pages resolve it in `app/middleware/auth.ts` through `@pvtch/shared/session`, which pvtch-twitch also uses. A session only resolves while its `token` still matches the account's overlay key.
+
+`pvtch_token` is HttpOnly, so page scripts can't read it; the header gets the signed-in name from the layout loader. Signing out POSTs to `/auth/logout`, which deletes the session record and clears both cookies.
 
 ## Durable Object Storage
 

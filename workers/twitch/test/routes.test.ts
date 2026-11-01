@@ -8,22 +8,30 @@ import {
   type TestEnv,
 } from './helpers/fakes';
 
-async function login(t: TestEnv, login: string) {
-  await t.accounts.put(`token-data-tok-${login}`, `id-${login}`);
+/**
+ * Store an account and a session for it, as www's sign-in does. Returns the
+ * session cookie; the overlay token is `tok-{login}`.
+ */
+async function signIn(t: TestEnv, id: string, login: string) {
+  const token = `tok-${login}`;
+  await t.accounts.put(`token-data-${token}`, id);
   await t.accounts.put(
-    `twitch-data-id-${login}`,
-    JSON.stringify({ id: `id-${login}`, login })
+    `twitch-data-${id}`,
+    JSON.stringify({ id, login, display_name: login, token })
   );
-  return `pvtch_token=tok-${login}`;
+  await t.accounts.put(
+    `session-s-${login}`,
+    JSON.stringify({ userId: id, token })
+  );
+  return `pvtch_token=s-${login}`;
 }
 
-async function loginAsBot(t: TestEnv) {
-  await t.accounts.put('token-data-tok-bot', BOT_ID);
-  await t.accounts.put(
-    `twitch-data-${BOT_ID}`,
-    JSON.stringify({ id: BOT_ID, login: 'botlingual' })
-  );
-  return 'pvtch_token=tok-bot';
+function login(t: TestEnv, login: string) {
+  return signIn(t, `id-${login}`, login);
+}
+
+function loginAsBot(t: TestEnv) {
+  return signIn(t, BOT_ID, 'botlingual');
 }
 
 const ORIGIN = 'https://twitch.example.com';
@@ -59,6 +67,15 @@ describe('admin routes', () => {
       t.env
     );
     expect(response.status).toBe(403);
+  });
+
+  it('does not accept an overlay token as a session', async () => {
+    await login(t, 'admin_user');
+    const cookie = 'pvtch_token=tok-admin_user';
+    for (const path of ['/bot/authorize?sender=botlingual', '/admin/flags']) {
+      const response = await fetchWorker(get(path, cookie), t.env);
+      expect(response.status).toBe(403);
+    }
   });
 
   it('refuses /bot/authorize for a logged-in non-admin', async () => {

@@ -57,7 +57,6 @@ export default [
   // Auth routes (loader only)
   route('auth/start', './routes/auth/start.tsx'),
   route('auth/callback', './routes/auth/callback.tsx'),
-  route('auth/remove', './routes/auth/remove.tsx'),
   route('auth/logout', './routes/auth/logout.tsx'),
   route('auth/grant', './routes/auth/grant.tsx'),
   route('auth/grant/callback', './routes/auth/grant.callback.tsx'),

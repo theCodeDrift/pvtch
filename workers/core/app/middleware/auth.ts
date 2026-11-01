@@ -4,21 +4,7 @@ import {
   userContext,
   instanceAccessContext,
 } from '@/context';
-import {
-  isValidToken,
-  twitchDataKeyPrefix,
-  type TwitchUserData,
-} from '@/lib/twitch-data';
-
-function parseCookies(cookieHeader: string | null): Record<string, string> {
-  if (!cookieHeader) return {};
-  return Object.fromEntries(
-    cookieHeader.split(';').map((c) => {
-      const [key, ...val] = c.trim().split('=');
-      return [key, val.join('=')];
-    })
-  );
-}
+import { sessionUser } from '@/lib/twitch-data';
 
 function parseAllowedUsers(envValue: string): string[] {
   if (!envValue || envValue.length === 0) return [];
@@ -36,26 +22,16 @@ export async function authMiddleware(
   next: () => Promise<Response>
 ): Promise<Response | void> {
   const env = context.get(cloudflareEnvironmentContext);
-  const cookies = parseCookies(request.headers.get('Cookie'));
-  const token = cookies['pvtch_token'];
 
-  // Resolve user from token
-  let authenticatedUser: TwitchUserData | undefined;
-  const twitchId = await isValidToken(token, env);
-  if (twitchId && token) {
-    const userData = await env.PVTCH_ACCOUNTS.get<TwitchUserData>(
-      `${twitchDataKeyPrefix}${twitchId}`,
-      'json'
-    );
-    if (userData) {
-      authenticatedUser = userData;
-      context.set(userContext, {
-        id: userData.id,
-        login: userData.login,
-        displayName: userData.display_name,
-        token: userData.token,
-      });
-    }
+  // Resolve user from the session cookie (or the localhost dev user)
+  const authenticatedUser = await sessionUser(request, env);
+  if (authenticatedUser) {
+    context.set(userContext, {
+      id: authenticatedUser.id,
+      login: authenticatedUser.login,
+      displayName: authenticatedUser.display_name,
+      token: authenticatedUser.token,
+    });
   }
 
   // Compute instance access

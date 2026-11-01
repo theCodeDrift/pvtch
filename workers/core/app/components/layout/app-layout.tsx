@@ -33,6 +33,10 @@ export function loader({ context }: Route.LoaderArgs) {
   return data({
     isPrivate: access?.isPrivate ?? false,
     isAllowed: access?.isAllowed ?? true,
+    // The header's signed-in state; pvtch_token is HttpOnly, so only the
+    // server knows whether the session is live.
+    // eslint-disable-next-line unicorn/no-null -- serialized to the client, where undefined is dropped
+    displayName: user?.displayName ?? null,
     // Bots is in preview: only LINGUAL_PREVIEW_USERS see the section.
     showBots: canUseLingual(env, user?.login),
   });
@@ -204,6 +208,7 @@ export default function AppLayout() {
             </a>
             <ThemeToggle />
             <TwitchLogin
+              displayName={loaderData.displayName}
               isPrivate={loaderData.isPrivate}
               isAllowed={loaderData.isAllowed}
             />

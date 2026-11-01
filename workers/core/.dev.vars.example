@@ -10,7 +10,8 @@
 # PVTCH_APP_URL=http://localhost:8787
 
 # Optional: Skip Twitch login entirely in dev by impersonating a user ID
-# When set, all auth checks pass and this value is used as the Twitch user ID
+# When set and PVTCH_APP_URL is localhost, every page, the scope grant and
+# every overlay URL act as this Twitch user ID. Ignored on any other host.
 # DEV_TWITCH_USER_ID=123456789
 
 # Optional: Restrict this instance to specific Twitch usernames (comma-separated)

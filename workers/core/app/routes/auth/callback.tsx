@@ -7,8 +7,19 @@ import {
   type TwitchUserData,
 } from '@/lib/twitch-data';
 import { createToken } from '@/lib/create-token';
-import { sessionCookies } from '@/lib/session-cookie';
+import {
+  LOGIN_STATE_COOKIE,
+  SESSION_COOKIE,
+  loginStateCookie,
+  readCookie,
+  sessionCookies,
+} from '@/lib/session-cookie';
 import { readSecret } from '@pvtch/shared/secrets';
+import {
+  SESSION_PREFIX,
+  SESSION_TTL_SECONDS,
+  type SessionRecord,
+} from '@pvtch/shared/session';
 
 type TwitchTokenResponse = {
   access_token: string;
@@ -35,7 +46,46 @@ type TwitchUserDataResponse = {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.get(cloudflareEnvironmentContext);
+  const response = await completeLogin(request, env);
+  response.headers.append('Set-Cookie', loginStateCookie(env, ''));
+  return response;
+}
+
+/**
+ * Start a session for `account`. The request's previous session, if any, is
+ * deleted so signing in again on one browser doesn't leave it behind.
+ */
+async function startSession(
+  request: Request,
+  env: Env,
+  account: TwitchUserData
+): Promise<string> {
+  const previous = readCookie(request, SESSION_COOKIE);
+  if (previous) {
+    await env.PVTCH_ACCOUNTS.delete(`${SESSION_PREFIX}${previous}`);
+  }
+
+  let sessionToken = createToken();
+  while (sessionToken === account.token) {
+    sessionToken = createToken();
+  }
+  const record: SessionRecord = { userId: account.id, token: account.token };
+  await env.PVTCH_ACCOUNTS.put(
+    `${SESSION_PREFIX}${sessionToken}`,
+    JSON.stringify(record),
+    { expirationTtl: SESSION_TTL_SECONDS }
+  );
+  return sessionToken;
+}
+
+async function completeLogin(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+
+  // the state must be the one /auth/start gave this browser
+  const state = url.searchParams.get('state');
+  if (!state || state !== readCookie(request, LOGIN_STATE_COOKIE)) {
+    return new Response('login state mismatch', { status: 400 });
+  }
 
   const error = url.searchParams.get('error');
   const errorDescription = url.searchParams.get('error_description');
@@ -112,52 +162,35 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     'json'
   );
 
+  let account: TwitchUserData;
   if (existing) {
+    account = existing;
+  } else {
+    account = {
+      id: user.id,
+      login: user.login,
+      display_name: user.display_name,
+      token: createToken(),
+    };
     await env.PVTCH_ACCOUNTS.put(
-      `${tokenDataKeyPrefix}${existing.token}`,
-      user.id
+      `${twitchDataKeyPrefix}${user.id}`,
+      JSON.stringify(account)
     );
-    const appUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
-    const headers = new Headers();
-    headers.set('Location', `${appUrl}/welcome`);
-    for (const cookie of sessionCookies(
-      env,
-      existing.token,
-      user.display_name
-    )) {
-      headers.append('Set-Cookie', cookie);
-    }
-
-    return new Response(undefined, { status: 302, headers });
   }
 
-  const twitchTokenData: TwitchUserData = {
-    id: userData.data[0].id,
-    login: userData.data[0].login,
-    display_name: userData.data[0].display_name,
-    token: createToken(),
-  };
-
   await env.PVTCH_ACCOUNTS.put(
-    `${twitchDataKeyPrefix}${user.id}`,
-    JSON.stringify(twitchTokenData)
-  );
-
-  await env.PVTCH_ACCOUNTS.put(
-    `${tokenDataKeyPrefix}${twitchTokenData.token}`,
+    `${tokenDataKeyPrefix}${account.token}`,
     user.id
   );
 
-  const newUserAppUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
-  const newHeaders = new Headers();
-  newHeaders.set('Location', `${newUserAppUrl}/welcome`);
-  for (const cookie of sessionCookies(
-    env,
-    twitchTokenData.token,
-    twitchTokenData.display_name
-  )) {
-    newHeaders.append('Set-Cookie', cookie);
+  const sessionToken = await startSession(request, env, account);
+
+  const appUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
+  const headers = new Headers();
+  headers.set('Location', `${appUrl}/welcome`);
+  for (const cookie of sessionCookies(env, sessionToken, user.display_name)) {
+    headers.append('Set-Cookie', cookie);
   }
 
-  return new Response(undefined, { status: 302, headers: newHeaders });
+  return new Response(undefined, { status: 302, headers });
 }

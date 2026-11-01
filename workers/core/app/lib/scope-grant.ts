@@ -1,7 +1,8 @@
 import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
+import { readCookie } from '@/lib/session-cookie';
 import {
-  isValidToken,
+  sessionUser,
   twitchDataKeyPrefix,
   type TwitchUserData,
 } from '@/lib/twitch-data';
@@ -43,27 +44,6 @@ export function isSafeReturnTo(path: string | null): path is string {
   if (path.includes('\\')) return false;
   const base = 'https://pvtch.invalid';
   return new URL(path, base).origin === base;
-}
-
-function readCookie(request: Request, name: string): string | undefined {
-  for (const part of (request.headers.get('Cookie') ?? '').split(';')) {
-    const [key, ...value] = part.trim().split('=');
-    if (key === name) return value.join('=');
-  }
-  return undefined;
-}
-
-async function sessionUser(
-  request: Request,
-  env: Env
-): Promise<TwitchUserData | undefined> {
-  const userId = await isValidToken(readCookie(request, 'pvtch_token'), env);
-  if (!userId) return undefined;
-  const data = await env.PVTCH_ACCOUNTS.get<TwitchUserData>(
-    `${twitchDataKeyPrefix}${userId}`,
-    'json'
-  );
-  return data ?? undefined;
 }
 
 function appUrl(env: Env): string {

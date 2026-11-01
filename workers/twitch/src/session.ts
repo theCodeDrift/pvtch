@@ -1,7 +1,5 @@
+import { resolveSession } from '@pvtch/shared/session';
 import { TWITCH_SENDERS, type SenderId } from '@pvtch/shared/twitch-registry';
-
-const TOKEN_PREFIX = 'token-data-';
-const TWITCH_DATA_PREFIX = 'twitch-data-';
 
 export interface SessionUser {
   id: string;
@@ -17,23 +15,19 @@ function readCookie(request: Request, name: string): string | undefined {
 }
 
 /**
- * The pvtch user behind the `pvtch_token` cookie. www sets it on
- * `Domain=pvtch.com`, so it reaches twitch.pvtch.com too; both workers read
- * the same PVTCH_ACCOUNTS records.
+ * The pvtch user behind the session in the `pvtch_token` cookie. www sets
+ * it on `Domain=pvtch.com`, so it reaches twitch.pvtch.com too; both
+ * workers resolve it with the same `@pvtch/shared/session` lookup.
  */
 export async function getSessionUser(
   request: Request,
   env: Env
 ): Promise<SessionUser | undefined> {
-  const token = readCookie(request, 'pvtch_token');
-  if (!token) return undefined;
-  const userId = await env.PVTCH_ACCOUNTS.get(`${TOKEN_PREFIX}${token}`);
-  if (!userId) return undefined;
-  const data = await env.PVTCH_ACCOUNTS.get<{ id: string; login: string }>(
-    `${TWITCH_DATA_PREFIX}${userId}`,
-    'json'
+  const account = await resolveSession(
+    env.PVTCH_ACCOUNTS,
+    readCookie(request, 'pvtch_token')
   );
-  return data ? { id: data.id, login: data.login } : undefined;
+  return account ? { id: account.id, login: account.login } : undefined;
 }
 
 /**

@@ -27,18 +27,23 @@ export function useLoginUrl() {
 }
 
 export const TwitchLogin = ({
+  displayName,
   isPrivate = false,
   isAllowed = true,
 }: {
+  /** From the layout loader: the signed-in user, or null with no session. */
+  displayName: string | null;
   isPrivate?: boolean;
   isAllowed?: boolean;
 }) => {
-  // pvtch_token is HttpOnly; pvtch_name is set and cleared alongside it.
-  const [userName] = useCookie('pvtch_name');
+  const [userName, , removeUserName] = useCookie('pvtch_name');
   const loginUrl = useLoginUrl();
-  const isLoggedIn = !!userName;
+  const isLoggedIn = displayName !== null;
 
-  const displayName = userName ? decodeURIComponent(userName) : undefined;
+  // A name cookie with no session (expired, or from before sessions) is stale.
+  useEffect(() => {
+    if (!isLoggedIn && userName !== undefined) removeUserName();
+  }, [isLoggedIn, userName, removeUserName]);
 
   const handleLogout = useCallback(() => {
     void signOut();
@@ -49,7 +54,7 @@ export const TwitchLogin = ({
       <Button variant="ghost" className="h-9 gap-1.5 px-3 text-sm" asChild>
         <a href="/private">
           <X size={16} />
-          {displayName ?? 'Logged in'}
+          {displayName}
         </a>
       </Button>
     );
@@ -61,7 +66,7 @@ export const TwitchLogin = ({
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-9 gap-1.5 px-3 text-sm">
             <TwitchIcon size={16} />
-            {displayName ?? 'Logged in'}
+            {displayName}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
