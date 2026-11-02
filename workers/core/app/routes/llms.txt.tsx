@@ -36,7 +36,7 @@ PVTCH is fully open source and can be self-hosted on Cloudflare's free tier.
 
 - Documentation: /howto/deploy-your-own
 - Source Code: https://github.com/thecodedrift/pvtch
-- License: MIT
+- License: FSL-1.1-ALv2 (becomes Apache-2.0 two years after each release)
 
 ## API Endpoints
 
