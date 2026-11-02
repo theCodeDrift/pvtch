@@ -91,9 +91,10 @@ export default function DeployYourOwn() {
         Deploy Your Own PVTCH Instance
       </h1>
       <p className="text-lg text-muted-foreground mb-4">
-        PVTCH is fully open source and designed to run on Cloudflare's free
-        tier. Follow this guide to deploy your own instance with complete
-        control over your data and customization.
+        PVTCH is source-available under the Functional Source License and
+        designed to run on Cloudflare's free tier. Follow this guide to deploy
+        your own instance with complete control over your data and
+        customization.
       </p>
       <p className="text-muted-foreground mb-8">
         Hosting your own instance also helps us save on infrastructure costs, so

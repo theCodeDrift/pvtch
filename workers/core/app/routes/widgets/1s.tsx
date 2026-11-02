@@ -76,7 +76,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: 'description',
       content:
-        'Create real-time chat polls for your Twitch stream. Viewers type their vote in chat and results display as animated bar charts in your OBS overlay. Free and open source.',
+        'Create real-time chat polls for your Twitch stream. Viewers type their vote in chat and results display as animated bar charts in your OBS overlay. Free and self-hostable.',
     },
     {
       property: 'og:title',

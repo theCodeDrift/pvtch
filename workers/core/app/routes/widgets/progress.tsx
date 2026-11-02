@@ -68,7 +68,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: 'description',
       content:
-        'Create customizable progress bars for your Twitch stream. Track sub goals, donations, or any metric with real-time OBS browser source overlays. Free and open source.',
+        'Create customizable progress bars for your Twitch stream. Track sub goals, donations, or any metric with real-time OBS browser source overlays. Free and self-hostable.',
     },
     {
       property: 'og:title',

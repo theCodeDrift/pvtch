@@ -14,15 +14,15 @@ import { PvtchLogo } from '@/components/icons/pvtch-logo';
 
 export function meta(_args: Route.MetaArgs) {
   return [
-    { title: 'PVTCH - Free Open Source Tools for Twitch Streamers' },
+    { title: 'PVTCH - Free, Self-Hostable Tools for Twitch Streamers' },
     {
       name: 'description',
       content:
-        'Free, open-source streaming tools for Twitch. Customizable OBS progress bars, AI-powered chat translation, and more. No subscriptions, no hidden fees.',
+        'Free, self-hostable streaming tools for Twitch. Customizable OBS progress bars, AI-powered chat translation, and more. No subscriptions, no hidden fees.',
     },
     {
       property: 'og:title',
-      content: 'PVTCH - Free Open Source Tools for Twitch Streamers',
+      content: 'PVTCH - Free, Self-Hostable Tools for Twitch Streamers',
     },
     {
       property: 'og:description',
@@ -178,7 +178,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Open Source Section */}
+      {/* Source-Available Section */}
       <section className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-20 sm:py-24">
           <div className="flex flex-col items-center text-center">
@@ -186,12 +186,13 @@ export default function Index() {
               <GithubIcon className="size-8" />
             </div>
             <h2 className="mb-4 text-3xl font-bold sm:text-4xl">
-              Open Source & Self-Hostable
+              Source-Available & Self-Hostable
             </h2>
             <p className="mb-8 max-w-2xl text-muted-foreground">
-              PVTCH is completely open source. Deploy your own instance for full
-              control over your data and customization, or contribute to make it
-              better for everyone.
+              PVTCH&apos;s source is on GitHub under the Functional Source
+              License. Use it, deploy your own instance for full control over
+              your data, share it with friends, or contribute to make it better
+              for everyone. Just don&apos;t resell it.
             </p>
             <div className="flex flex-col gap-4 sm:flex-row">
               <Button size="lg" variant="outline" className="gap-2" asChild>
