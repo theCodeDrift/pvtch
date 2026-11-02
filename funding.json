@@ -1,0 +1,59 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Jakob Heuser",
+    "email": "jakob@codedrift.com",
+    "description": "Jakob Heuser (theCodeDrift) builds and maintains pvtch, a set of free streaming tools for Twitch creators.",
+    "webpageUrl": {
+      "url": "https://www.pvtch.com"
+    }
+  },
+  "projects": [
+    {
+      "guid": "pvtch",
+      "name": "pvtch",
+      "description": "Free, self-hostable streaming tools for Twitch creators: OBS widgets such as progress bars and to-do lists, AI chat translation, and a chat bot. It runs entirely on Cloudflare Workers and fits within Cloudflare's free tier, so any streamer can deploy their own copy.",
+      "webpageUrl": {
+        "url": "https://www.pvtch.com"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/thecodedrift/pvtch",
+        "wellKnown": "https://github.com/thecodedrift/pvtch/blob/main/.well-known/funding-manifest-urls"
+      },
+      "licenses": ["spdx:FSL-1.1-ALv2"],
+      "tags": [
+        "twitch",
+        "streaming",
+        "obs",
+        "translation",
+        "web-development",
+        "cloud"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "ko-fi",
+        "type": "payment-provider",
+        "address": "https://ko-fi.com/theCodeDrift",
+        "description": "One-time or recurring support through Ko-fi."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "supporter",
+        "status": "active",
+        "name": "Supporter",
+        "description": "Pay what you like, once or every month, to keep pvtch free and hosted.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["ko-fi"]
+      }
+    ]
+  }
+}

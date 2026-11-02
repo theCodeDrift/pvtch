@@ -54,6 +54,9 @@ export default [
   // Machine-readable site info for AI assistants
   route('llms.txt', './routes/llms.txt.tsx'),
 
+  // Funding manifest (https://fundingjson.org/)
+  route('funding.json', './routes/funding.json.tsx'),
+
   // Auth routes (loader only)
   route('auth/start', './routes/auth/start.tsx'),
   route('auth/callback', './routes/auth/callback.tsx'),
