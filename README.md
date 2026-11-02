@@ -62,6 +62,16 @@ pnpm --filter @pvtch/storage deploy
 pnpm --filter @pvtch/core deploy
 ```
 
+## License
+
+pvtch is licensed under the [Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2). You may run, modify and self-host it for free, including for a channel you monetize. You may not offer it, or a product built from it, as a competing commercial service. Each release becomes available under the Apache License 2.0 two years after it is published.
+
+The pvtch name and logo are not covered by the license. See [TRADEMARKS.md](TRADEMARKS.md) before publishing a fork.
+
+## Funding
+
+pvtch publishes a [funding.json](funding.json) manifest, also served at https://www.pvtch.com/funding.json. You can support the project on [Ko-fi](https://ko-fi.com/theCodeDrift).
+
 # Use of AI In This Project
 
 ## Services
