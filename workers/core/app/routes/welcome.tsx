@@ -29,7 +29,7 @@ export default function Welcome() {
           {displayName ? `Welcome, ${displayName}!` : 'Welcome, friend!'}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          PVTCH is a collection of free, open-source tools built for Twitch
+          PVTCH is a collection of free, self-hostable tools built for Twitch
           streamers. No ads, no tracking, no nonsense.
         </p>
       </div>

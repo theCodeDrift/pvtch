@@ -81,7 +81,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: 'description',
       content:
-        'Add a collaborative task list overlay to your Twitch stream. Viewers add and complete tasks via chat commands. Free and open source.',
+        'Add a collaborative task list overlay to your Twitch stream. Viewers add and complete tasks via chat commands. Free and self-hostable.',
     },
     {
       property: 'og:title',

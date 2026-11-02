@@ -3,7 +3,7 @@
 
 const LLMS_TXT = `# PVTCH
 
-> Free, open-source streaming tools for Twitch streamers
+> Free, source-available streaming tools for Twitch streamers
 
 PVTCH provides free tools to enhance Twitch streams. Built on Cloudflare Workers, it's designed to be self-hostable and runs entirely within Cloudflare's free tier.
 
@@ -32,7 +32,7 @@ AI-powered real-time chat translation. Automatically translates foreign language
 
 ## Self-Hosting
 
-PVTCH is fully open source and can be self-hosted on Cloudflare's free tier.
+PVTCH is source-available under the Functional Source License (FSL-1.1-ALv2). Use it, self-host it on Cloudflare's free tier, and share it with friends; just don't resell it as a competing service.
 
 - Documentation: /howto/deploy-your-own
 - Source Code: https://github.com/thecodedrift/pvtch
