@@ -51,4 +51,14 @@ export const jobSchedulerMigrations: Migrations = {
        ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL AND status = 'pending'`
     );
   },
+  // Record when a job started running, so processAlarm() can recover a row
+  // left `running` by an eviction or deploy mid-handler. Rows already running
+  // get the migration time, so they are recovered one lease from now.
+  5: (sql) => {
+    sql.exec(`ALTER TABLE jobs ADD COLUMN started_at INTEGER`);
+    sql.exec(
+      `UPDATE jobs SET started_at = ? WHERE status = 'running'`,
+      Date.now()
+    );
+  },
 };

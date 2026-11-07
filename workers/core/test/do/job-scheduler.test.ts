@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { JobScheduler } from '../../do/helpers/job-scheduler';
+import { JobScheduler, JOB_LEASE_MS } from '../../do/helpers/job-scheduler';
 
 // Hand-rolled SqlStorage shim over better-sqlite3. Cloudflare's `exec()`
 // doesn't distinguish reads from writes; better-sqlite3 does, so we try
@@ -265,5 +265,112 @@ describe('JobScheduler — reaper index (Bug 3)', () => {
       .all(cutoff) as { detail: string }[];
     const detail = plan.map((p) => p.detail).join(' | ');
     expect(detail).toMatch(/idx_jobs_reaper/);
+  });
+});
+
+interface JobState {
+  task: string;
+  status: string;
+  attempt: number;
+  scheduled_at: number;
+  last_error: string | null;
+}
+
+function allJobs(): JobState[] {
+  return database
+    .prepare(
+      `SELECT task, status, attempt, scheduled_at, last_error FROM jobs ORDER BY created_at, id`
+    )
+    .all() as JobState[];
+}
+
+describe('JobScheduler — idempotency key collision on retry', () => {
+  it('lets a newer pending job supersede a failing retry with the same key', async () => {
+    scheduler.schedule(
+      new Date(Date.now() - 1000),
+      'sync-profile',
+      {},
+      { key: 'sync-profile' }
+    );
+    scheduler.schedule(0, 'other', {});
+    const ran: string[] = [];
+
+    await expect(
+      scheduler.processAlarm({
+        scheduled: (job) => {
+          ran.push(job.task);
+          if (job.task !== 'sync-profile') return;
+          // A schedule() with the same key lands while the job awaits I/O.
+          scheduler.schedule(0, 'sync-profile', {}, { key: 'sync-profile' });
+          throw new Error('kv down');
+        },
+      })
+    ).resolves.toBeUndefined();
+
+    expect(ran).toEqual(['sync-profile', 'other']);
+    const rows = allJobs().filter((job) => job.task === 'sync-profile');
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'dead', last_error: 'kv down' }),
+        expect.objectContaining({ status: 'pending', attempt: 0 }),
+      ])
+    );
+    expect(allJobs().some((job) => job.status === 'running')).toBe(false);
+  });
+});
+
+describe('JobScheduler — expired leases', () => {
+  const noop = { scheduled: () => {} };
+
+  it('tracks schema version at 6 with a started_at column', () => {
+    const row = database
+      .prepare('SELECT version FROM _job_scheduler_version')
+      .get() as { version: number };
+    expect(row.version).toBe(6);
+    const columns = database.prepare("PRAGMA table_info('jobs')").all() as {
+      name: string;
+    }[];
+    expect(columns.map((c) => c.name)).toContain('started_at');
+  });
+
+  it('retries a job left running past the lease', async () => {
+    scheduler.schedule(0, 'sync-profile', {}, { key: 'sync-profile' });
+    database
+      .prepare(`UPDATE jobs SET status = 'running', started_at = ?`)
+      .run(Date.now());
+    vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+
+    await scheduler.processAlarm(noop);
+
+    expect(allJobs()[0]).toMatchObject({
+      status: 'pending',
+      attempt: 1,
+      scheduled_at: Date.now() + 30_000,
+      last_error: 'lease expired while running',
+    });
+  });
+
+  it('leaves a job alone while its lease is live', async () => {
+    scheduler.schedule(0, 'sync-profile', {});
+    database
+      .prepare(`UPDATE jobs SET status = 'running', started_at = ?`)
+      .run(Date.now());
+    vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS - 1));
+
+    await scheduler.processAlarm(noop);
+
+    expect(allJobs()[0]?.status).toBe('running');
+  });
+
+  it('arms the alarm for the lease expiry of a running job', () => {
+    scheduler.schedule(0, 'sync-profile', {});
+    const startedAt = Date.now();
+    void scheduler.processAlarm({ scheduled: () => new Promise(() => {}) });
+    setAlarm.mockClear();
+
+    // Any later sync (here a schedule far in the future) keeps the lease covered.
+    scheduler.schedule(86400, 'later', {});
+
+    expect(setAlarm).toHaveBeenLastCalledWith(startedAt + JOB_LEASE_MS);
   });
 });

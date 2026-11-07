@@ -8,6 +8,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { CronExpressionParser } from 'cron-parser';
 
 import { migrate } from './migrate';
+import { queryRows } from './query-rows';
 import { jobSchedulerMigrations } from './job-scheduler/migrations';
 
 export interface ScheduledJob {
@@ -37,6 +38,25 @@ export type ScheduledJobHandler = (job: ScheduledJob) => Promise<void>;
 
 /** How long to retain completed/dead jobs before reaping (30 days) */
 export const JOB_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long a job may stay `running` before processAlarm() treats its handler
+ * as lost (evicted or redeployed mid-await) and fails it. A DO alarm handler
+ * gets at most 15 minutes of wall time, so a live handler never outlasts it.
+ */
+export const JOB_LEASE_MS = 15 * 60 * 1000;
+
+/** The columns processAlarm() reads to run a job and record its outcome. */
+interface JobRow {
+  id: string;
+  task: string;
+  payload: string;
+  cron: string | null;
+  attempt: number;
+  max_retries: number;
+  backoff_base_seconds: number;
+  idempotency_key: string | null;
+}
 
 /**
  * Calculate the next occurrence of a cron expression after a given timestamp.
@@ -211,44 +231,46 @@ export class JobScheduler {
   }
 
   /**
-   * Called from the DO's alarm() handler. Processes all due jobs
-   * and invokes host.scheduled() for each.
+   * Called from the DO's alarm() handler. Recovers jobs whose lease expired,
+   * then processes all due jobs and invokes the handler for each.
    *
    * This method never throws. Individual job failures are caught,
-   * recorded via last_error on the job row, and retried with exponential backoff.
+   * recorded via last_error on the job row, and retried with exponential
+   * backoff. A failure to record one job's outcome is logged and leaves the
+   * row `running`, where the lease recovers it; it never skips other jobs.
    */
   async processAlarm(): Promise<void> {
     const now = Date.now();
-    const dueJobs = this.sql
-      .exec(
-        `SELECT id, task, payload, cron, attempt, max_retries, backoff_base_seconds
+    this.recoverExpiredLeases(now);
+
+    const dueJobs = queryRows<JobRow>(
+      this.sql,
+      `SELECT id, task, payload, cron, attempt, max_retries, backoff_base_seconds, idempotency_key
        FROM jobs
        WHERE scheduled_at <= ? AND status = 'pending'
        ORDER BY scheduled_at ASC`,
-        now
-      )
-      .toArray();
+      now
+    );
 
     for (const job of dueJobs) {
-      this.sql.exec(`UPDATE jobs SET status = 'running' WHERE id = ?`, job.id);
+      this.sql.exec(
+        `UPDATE jobs SET status = 'running', started_at = ? WHERE id = ?`,
+        Date.now(),
+        job.id
+      );
 
       try {
         await this.handler({
-          id: job.id as string,
-          task: job.task as string,
-          payload: JSON.parse(job.payload as string),
+          id: job.id,
+          task: job.task,
+          payload: JSON.parse(job.payload),
           recurring: Boolean(job.cron),
         });
 
         // Success
         if (job.cron) {
           // Recurring: calculate next occurrence, reset attempt counter
-          const nextTime = getNextCronTime(job.cron as string, now);
-          this.sql.exec(
-            `UPDATE jobs SET status = 'pending', scheduled_at = ?, attempt = 0 WHERE id = ?`,
-            nextTime,
-            job.id
-          );
+          this.repend(job, getNextCronTime(job.cron, now), 0);
         } else {
           // One-shot: mark completed
           this.sql.exec(
@@ -257,43 +279,17 @@ export class JobScheduler {
           );
         }
       } catch (error) {
-        const attempt = job.attempt as number;
-        const maxRetries = job.max_retries as number;
-        const backoffBase = job.backoff_base_seconds as number;
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-
-        if (attempt < maxRetries) {
-          // Retry with exponential backoff: base * 2^attempt seconds
-          const delayMs = backoffBase * Math.pow(2, attempt) * 1000;
-          const nextRetryAt = now + delayMs;
-
-          this.sql.exec(
-            `UPDATE jobs SET status = 'pending', attempt = ?, scheduled_at = ?, last_error = ? WHERE id = ?`,
-            attempt + 1,
-            nextRetryAt,
-            errorMessage,
-            job.id
+        try {
+          this.recordFailure(
+            job,
+            error instanceof Error ? error.message : String(error),
+            now
           );
-        } else {
-          // Retries exhausted
-          if (job.cron) {
-            // Cron jobs: log failure, schedule fresh next occurrence with reset attempt
-            const nextTime = getNextCronTime(job.cron as string, now);
-            this.sql.exec(
-              `UPDATE jobs SET status = 'pending', scheduled_at = ?, attempt = 0, last_error = ? WHERE id = ?`,
-              nextTime,
-              errorMessage,
-              job.id
-            );
-          } else {
-            // One-shot: mark as dead
-            this.sql.exec(
-              `UPDATE jobs SET status = 'dead', last_error = ? WHERE id = ?`,
-              errorMessage,
-              job.id
-            );
-          }
+        } catch (bookkeepingError) {
+          console.error(
+            `JobScheduler: could not record failure of job ${job.id}`,
+            bookkeepingError
+          );
         }
       }
     }
@@ -309,13 +305,105 @@ export class JobScheduler {
   }
 
   /**
-   * Set the DO alarm to the earliest pending job's scheduled_at time.
-   * If no pending jobs, do not set an alarm.
+   * Fail every job that has been `running` longer than the lease: its handler
+   * was cut off (eviction, deploy) and its row would otherwise stay `running`
+   * forever, blocking cron dedupe and `hasActive()`.
+   */
+  private recoverExpiredLeases(now: number): void {
+    const expired = queryRows<JobRow>(
+      this.sql,
+      `SELECT id, task, payload, cron, attempt, max_retries, backoff_base_seconds, idempotency_key
+         FROM jobs
+         WHERE status = 'running' AND (started_at IS NULL OR started_at <= ?)`,
+      now - JOB_LEASE_MS
+    );
+
+    for (const job of expired) {
+      try {
+        this.recordFailure(job, 'lease expired while running', now);
+      } catch (error) {
+        console.error(`JobScheduler: could not recover job ${job.id}`, error);
+      }
+    }
+  }
+
+  /** Retry a failed job with backoff, or give up once retries run out. */
+  private recordFailure(job: JobRow, errorMessage: string, now: number): void {
+    if (job.attempt < job.max_retries) {
+      // Retry with exponential backoff: base * 2^attempt seconds
+      const delayMs =
+        job.backoff_base_seconds * Math.pow(2, job.attempt) * 1000;
+      this.repend(job, now + delayMs, job.attempt + 1, errorMessage);
+    } else if (job.cron) {
+      // Cron jobs: log failure, schedule fresh next occurrence with reset attempt
+      this.repend(job, getNextCronTime(job.cron, now), 0, errorMessage);
+    } else {
+      // One-shot: mark as dead
+      this.sql.exec(
+        `UPDATE jobs SET status = 'dead', last_error = ? WHERE id = ?`,
+        errorMessage,
+        job.id
+      );
+    }
+  }
+
+  /**
+   * Put a job back in the queue. Only one pending row may hold an idempotency
+   * key, and `schedule()` may have queued a newer one with the same key while
+   * this job ran. That newer row supersedes this one, which is closed out
+   * instead: `dead` with its error if it failed, `completed` if it succeeded.
+   */
+  private repend(
+    job: JobRow,
+    scheduledAt: number,
+    attempt: number,
+    errorMessage?: string
+  ): void {
+    if (job.idempotency_key !== null) {
+      const superseded =
+        this.sql
+          .exec(
+            `SELECT id FROM jobs WHERE idempotency_key = ? AND status = 'pending' AND id != ? LIMIT 1`,
+            job.idempotency_key,
+            job.id
+          )
+          .toArray().length > 0;
+      if (superseded) {
+        this.sql.exec(
+          `UPDATE jobs SET status = ?, last_error = COALESCE(?, last_error) WHERE id = ?`,
+          errorMessage === undefined ? 'completed' : 'dead',
+          // eslint-disable-next-line unicorn/no-null -- SQL requires null for absent values
+          errorMessage ?? null,
+          job.id
+        );
+        return;
+      }
+    }
+
+    this.sql.exec(
+      `UPDATE jobs SET status = 'pending', scheduled_at = ?, attempt = ?, last_error = COALESCE(?, last_error) WHERE id = ?`,
+      scheduledAt,
+      attempt,
+      // eslint-disable-next-line unicorn/no-null -- SQL requires null for absent values
+      errorMessage ?? null,
+      job.id
+    );
+  }
+
+  /**
+   * Set the DO alarm to the earliest pending job's scheduled_at time, or the
+   * earliest lease expiry of a running job if that comes first. If neither
+   * exists, do not set an alarm.
    */
   private syncAlarm(): void {
     const next = this.sql
       .exec(
-        `SELECT MIN(scheduled_at) as next_at FROM jobs WHERE status = 'pending'`
+        `SELECT MIN(at) as next_at FROM (
+           SELECT scheduled_at AS at FROM jobs WHERE status = 'pending'
+           UNION ALL
+           SELECT COALESCE(started_at, 0) + ? AS at FROM jobs WHERE status = 'running'
+         )`,
+        JOB_LEASE_MS
       )
       .toArray();
 

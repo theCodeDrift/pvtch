@@ -2,7 +2,11 @@
 // (MIT), with pvtch's pending-only idempotency cases.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { JobScheduler, JOB_RETENTION_MS } from '../src/helpers/job-scheduler';
+import {
+  JobScheduler,
+  JOB_LEASE_MS,
+  JOB_RETENTION_MS,
+} from '../src/helpers/job-scheduler';
 import type { ScheduledJobHandler } from '../src/helpers/job-scheduler';
 
 import { createWorkerdSql } from './helpers/workerd-sql';
@@ -33,6 +37,10 @@ describe('JobScheduler', () => {
     return sql.exec('SELECT * FROM jobs').toArray();
   }
 
+  function markRunning(startedAt: number) {
+    sql.exec(`UPDATE jobs SET status = 'running', started_at = ?`, startedAt);
+  }
+
   describe('migrations', () => {
     it('creates the jobs table with expected schema', () => {
       const columns = sql
@@ -53,15 +61,16 @@ describe('JobScheduler', () => {
           'last_error',
           'idempotency_key',
           'created_at',
+          'started_at',
         ])
       );
     });
 
-    it('tracks schema version at 4', () => {
+    it('tracks schema version at 5', () => {
       const row = sql
         .exec<{ version: number }>('SELECT version FROM _job_scheduler_version')
         .one();
-      expect(row.version).toBe(4);
+      expect(row.version).toBe(5);
     });
   });
 
@@ -439,6 +448,128 @@ describe('JobScheduler', () => {
       scheduler.schedule('0 */6 * * *', 'reconcile', {});
 
       expect(getJobs()).toHaveLength(1);
+    });
+  });
+  describe('idempotency key collisions', () => {
+    it('lets a newer pending job supersede a failing retry with the same key', async () => {
+      // A sync job runs; while it awaits I/O, senderChanged() queues the same
+      // key again, then the run fails. Its retry would be a second pending row
+      // for the key, which the unique index refuses.
+      scheduler.schedule(
+        new Date(Date.now() - 1000),
+        'sync',
+        {},
+        { key: 'sync' }
+      );
+      scheduler.schedule(0, 'other', {});
+      handler.mockImplementation((job) => {
+        if (job.task !== 'sync') return Promise.resolve();
+        scheduler.schedule(0, 'sync', {}, { key: 'sync' });
+        return Promise.reject(new Error('queue down'));
+      });
+
+      await expect(scheduler.processAlarm()).resolves.toBeUndefined();
+
+      // The failure did not skip the next due job.
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ task: 'other' })
+      );
+      const sync = getJobs().filter((job) => job.task === 'sync');
+      expect(sync).toHaveLength(2);
+      expect(sync).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ status: 'dead', last_error: 'queue down' }),
+          expect.objectContaining({ status: 'pending', attempt: 0 }),
+        ])
+      );
+      expect(getJobs().filter((job) => job.status === 'running')).toHaveLength(
+        0
+      );
+    });
+
+    it('closes out a keyed cron run when a newer pending job holds its key', async () => {
+      scheduler.schedule('0 0 * * *', 'cron-task', {}, { key: 'cron-key' });
+      vi.setSystemTime(new Date('2026-01-17T00:00:00Z'));
+      handler.mockImplementation(() => {
+        scheduler.schedule(60, 'cron-task', {}, { key: 'cron-key' });
+        return Promise.resolve();
+      });
+
+      await expect(scheduler.processAlarm()).resolves.toBeUndefined();
+
+      const statuses = getJobs().map((job) => job.status);
+      expect(statuses).toHaveLength(2);
+      expect(statuses).toEqual(
+        expect.arrayContaining(['completed', 'pending'])
+      );
+    });
+  });
+
+  describe('expired leases', () => {
+    it('retries a one-shot left running past the lease', async () => {
+      scheduler.schedule(0, 'sync', {}, { key: 'sync' });
+      markRunning(Date.now());
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+
+      await scheduler.processAlarm();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(getJobs()[0]).toMatchObject({
+        status: 'pending',
+        attempt: 1,
+        scheduled_at: Date.now() + 30_000,
+        last_error: 'lease expired while running',
+      });
+    });
+
+    it('leaves a job alone while its lease is live', async () => {
+      scheduler.schedule(0, 'sync', {});
+      markRunning(Date.now());
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS - 1));
+
+      await scheduler.processAlarm();
+
+      expect(getJobs()[0].status).toBe('running');
+    });
+
+    it('re-arms a cron job whose run was cut off', async () => {
+      scheduler.schedule('0 */6 * * *', 'reconcile', {});
+      markRunning(Date.now());
+      // While stuck, the cron dedupe counts the running row.
+      scheduler.schedule('0 */6 * * *', 'reconcile', {});
+      expect(getJobs()).toHaveLength(1);
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+
+      await scheduler.processAlarm();
+
+      const [job] = getJobs();
+      expect(job.status).toBe('pending');
+      expect(job.scheduled_at as number).toBeGreaterThan(Date.now());
+    });
+
+    it('closes out a stuck job whose key a newer pending job holds', async () => {
+      scheduler.schedule(0, 'sync', {}, { key: 'sync' });
+      markRunning(Date.now());
+      scheduler.schedule(3600, 'sync', {}, { key: 'sync' });
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+
+      await expect(scheduler.processAlarm()).resolves.toBeUndefined();
+
+      const statuses = getJobs().map((job) => job.status);
+      expect(statuses).toEqual(expect.arrayContaining(['dead', 'pending']));
+    });
+
+    it('arms the alarm for the lease expiry of a running job', () => {
+      scheduler.schedule(0, 'sync', {});
+      const startedAt = Date.now();
+      handler.mockImplementation(() => new Promise(() => {}));
+      void scheduler.processAlarm();
+      setAlarm.mockClear();
+
+      // Any later sync (here a no-op cancel) keeps the lease covered.
+      scheduler.cancel('unrelated');
+
+      expect(setAlarm).toHaveBeenLastCalledWith(startedAt + JOB_LEASE_MS);
     });
   });
 });
