@@ -226,6 +226,9 @@ importers:
 
   workers/lingual:
     dependencies:
+      '@openrouter/sdk':
+        specifier: ^1.5.63
+        version: 1.5.63
       '@pvtch/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1887,6 +1890,12 @@ packages:
         integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==,
       }
     engines: { node: '>= 8' }
+
+  '@openrouter/sdk@1.5.63':
+    resolution:
+      {
+        integrity: sha512-3LEAN6lq176K75NlTWT7dEP56RcaqsbED076/oH7NjxYV/Bt1lCn8Nwc/9V5iXN2BySKhJD6HBRkVNYC0gv8gw==,
+      }
 
   '@poppinss/colors@4.1.6':
     resolution:
@@ -7509,6 +7518,10 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@openrouter/sdk@1.5.63':
+    dependencies:
+      zod: 4.2.1
 
   '@poppinss/colors@4.1.6':
     dependencies:

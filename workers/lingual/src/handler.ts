@@ -10,12 +10,19 @@ import type {
 } from '@pvtch/shared/twitch-queue';
 
 import { translateChatMessage } from './lingo/pipeline';
+import { translateChatMessageV2 } from './lingo/pipeline-v2';
 
 const KNOWN_BOTS = new Set(knownBots.map((name) => name.toLowerCase()));
 
 /** A translation this late is noise; chat has moved on. pvtch-twitch checks
  * again before sending. */
 export const MAX_REPLY_AGE_MS = 60 * 1000;
+
+/** Post as a plain message instead of a threaded reply. */
+export const NO_THREAD_FLAG = 'lingual.no-thread';
+
+/** Use the OpenRouter translation flow instead of Workers AI. */
+export const TRANSLATE_V2_FLAG = 'lingual.translate-v2';
 
 /** The broadcaster's TwitchChannel Durable Object in pvtch-storage. */
 function channelStub(env: Env, broadcasterId: string) {
@@ -76,7 +83,10 @@ export async function handleLingualEvent(
 
   if (now - message.timestamp > MAX_REPLY_AGE_MS) return ack;
 
-  const reply = await translateChatMessage(env, event, settings.language);
+  const translateMessage = message.flags.includes(TRANSLATE_V2_FLAG)
+    ? translateChatMessageV2
+    : translateChatMessage;
+  const reply = await translateMessage(env, event, settings.language);
   if (!reply) return ack;
 
   const send: TwitchSendMessage = {
@@ -86,7 +96,10 @@ export async function handleLingualEvent(
     senderId: message.senderId,
     handlerId: 'lingual',
     message: reply,
-    replyParentMessageId: event.message_id,
+    replyParentMessageId: message.flags.includes(NO_THREAD_FLAG)
+      ? // eslint-disable-next-line unicorn/no-null -- schema: null means no thread
+        null
+      : event.message_id,
     timestamp: message.timestamp,
   };
   await env.TWITCH_EVENTS.send(send);
