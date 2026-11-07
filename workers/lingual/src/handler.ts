@@ -1,5 +1,5 @@
 import { isKnownBot } from '@pvtch/shared/known-bots';
-import { ack, type Outcome } from '@pvtch/shared/queue-outcome';
+import { ack, retryIn, type Outcome } from '@pvtch/shared/queue-outcome';
 import {
   CHAT_MESSAGE_TYPE,
   chatMessageEvent,
@@ -16,6 +16,10 @@ import { translateChatMessageV2 } from './lingo/pipeline-v2';
 /** A translation this late is noise; chat has moved on. pvtch-twitch checks
  * again before sending. */
 export const MAX_REPLY_AGE_MS = 60 * 1000;
+
+/** Wait before retrying a failed model call. Short, so the retry lands well
+ * inside MAX_REPLY_AGE_MS. */
+export const RETRY_DELAY_SECONDS = 5;
 
 /** Post as a plain message instead of a threaded reply. */
 export const NO_THREAD_FLAG = 'lingual.no-thread';
@@ -86,7 +90,10 @@ export async function handleLingualEvent(
 
   // A repeated message is translated once: raids and copypasta would
   // otherwise fill chat with the same reply. As with the claim above, a retry
-  // must not count as a repeat of itself.
+  // must not count as a repeat of itself. Marking before translating keeps
+  // concurrent repeats from all reaching the model; if the translation fails,
+  // this message keeps the mark and retries, so the burst still gets its one
+  // reply.
   if (attempts === 1) {
     const key = await messageKey(event.message.fragments);
     if (key) {
@@ -98,8 +105,9 @@ export async function handleLingualEvent(
   const translateMessage = message.flags.includes(TRANSLATE_V2_FLAG)
     ? translateChatMessageV2
     : translateChatMessage;
-  const reply = await translateMessage(env, event, settings.language);
-  if (!reply) return ack;
+  const result = await translateMessage(env, event, settings.language);
+  if (result.kind === 'failed') return retryWhileFresh(message, now);
+  if (result.kind === 'quiet') return ack;
 
   const send: TwitchSendMessage = {
     kind: 'send',
@@ -107,7 +115,7 @@ export async function handleLingualEvent(
     broadcasterId: message.broadcasterId,
     senderId: message.senderId,
     handlerId: 'lingual',
-    message: reply,
+    message: result.reply,
     replyParentMessageId: message.flags.includes(NO_THREAD_FLAG)
       ? // eslint-disable-next-line unicorn/no-null -- schema: null means no thread
         null
@@ -116,4 +124,17 @@ export async function handleLingualEvent(
   };
   await env.TWITCH_EVENTS.send(send);
   return ack;
+}
+
+/** Retry a failed translation, unless the retry would land after the reply
+ * stopped being worth posting. */
+function retryWhileFresh(message: HandlerEventMessage, now: number): Outcome {
+  const retryAt = now + RETRY_DELAY_SECONDS * 1000;
+  if (retryAt - message.timestamp > MAX_REPLY_AGE_MS) {
+    console.warn('Lingual translation failed too late to retry', {
+      messageId: message.messageId,
+    });
+    return ack;
+  }
+  return retryIn(RETRY_DELAY_SECONDS);
 }

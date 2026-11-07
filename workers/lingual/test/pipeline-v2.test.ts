@@ -26,6 +26,9 @@ const spanishReply = JSON.stringify({
   translation: 'hi friends, how is everyone tonight?',
 });
 
+const quiet = { kind: 'quiet' };
+const failed = { kind: 'failed' };
+
 describe('translateChatMessageV2', () => {
   const { env } = createTestEnv();
   const defaults = v2ConfigFromEnv(env);
@@ -47,37 +50,38 @@ describe('translateChatMessageV2', () => {
   });
 
   it('translates when detection is confident it is another language', async () => {
-    await expect(translateEvent()).resolves.toBe(
-      'hi friends, how is everyone tonight?'
-    );
+    await expect(translateEvent()).resolves.toEqual({
+      kind: 'reply',
+      reply: 'hi friends, how is everyone tonight?',
+    });
   });
 
   it('translates at the confidence threshold', async () => {
     decide.mockResolvedValue(noul(0.1));
 
-    await expect(translateEvent()).resolves.toBeDefined();
+    await expect(translateEvent()).resolves.toMatchObject({ kind: 'reply' });
   });
 
   it('stays quiet without calling the translator above the threshold', async () => {
     decide.mockResolvedValue(noul(0.11));
 
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(quiet);
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('stays quiet when detection refuses', async () => {
+  it('fails when detection refuses', async () => {
     decide.mockResolvedValue({
       answers: { inTargetLanguage: { type: 'refusal' } },
     });
 
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(failed);
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('stays quiet when detection fails', async () => {
+  it('fails when detection fails', async () => {
     decide.mockRejectedValue(new Error('OpenRouter is down'));
 
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(failed);
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -92,7 +96,7 @@ describe('translateChatMessageV2', () => {
       },
     });
 
-    await expect(translateEvent(event)).resolves.toBeUndefined();
+    await expect(translateEvent(event)).resolves.toEqual(quiet);
     expect(decide).not.toHaveBeenCalled();
   });
 
@@ -167,15 +171,15 @@ describe('translateChatMessageV2', () => {
       )
     );
 
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(quiet);
   });
 
-  it('stays quiet when the translator returns bad JSON or fails', async () => {
+  it('fails when the translator returns bad JSON or fails', async () => {
     send.mockResolvedValue(translation('not json'));
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(failed);
 
     send.mockRejectedValue(new Error('OpenRouter is down'));
-    await expect(translateEvent()).resolves.toBeUndefined();
+    await expect(translateEvent()).resolves.toEqual(failed);
   });
 
   it('traces each stage', async () => {
@@ -263,14 +267,14 @@ describe('translateChatMessageV2', () => {
       );
     });
 
-    it('stays quiet on an invalid env value', async () => {
+    it('fails on an invalid env value', async () => {
       await expect(
         translateChatMessageV2(
           withVars({ LINGUAL_V2_TRANSLATOR_MODEL: 'no-provider' }),
           chatEvent(),
           'english'
         )
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual(failed);
       expect(decide).not.toHaveBeenCalled();
     });
 

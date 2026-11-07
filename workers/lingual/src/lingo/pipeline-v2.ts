@@ -6,7 +6,7 @@ import type {
 import { v2ConfigFromEnv, type V2Config } from './config-v2';
 import { targetLanguageProbability } from './detector-v2';
 import { openRouterClient } from './openrouter';
-import { formatReply } from './pipeline';
+import { formatReply, type ChatTranslation } from './pipeline';
 import { URL_RE, preprocess, textFromFragments } from './preprocess';
 import { translateV2 } from './translator-v2';
 
@@ -121,13 +121,24 @@ export async function traceChatMessageV2(
     : { outcome: 'usernames-only', ...trace };
 }
 
-/** Translate a chat message, or return undefined when the bot should stay
- * quiet. */
+/** Outcomes where a model call failed, so a retry may succeed. */
+const FAILED_OUTCOMES: ReadonlySet<V2Outcome> = new Set([
+  'detection-failed',
+  'translate-failed',
+]);
+
+/** Translate a chat message: a reply to post, quiet when the bot has nothing
+ * to say, or failed when a model call failed. */
 export async function translateChatMessageV2(
   env: Env,
   event: ChatMessageEvent,
   targetLanguage: string
-): Promise<string | undefined> {
-  const { reply } = await traceChatMessageV2(env, event, targetLanguage);
-  return reply;
+): Promise<ChatTranslation> {
+  const { outcome, reply } = await traceChatMessageV2(
+    env,
+    event,
+    targetLanguage
+  );
+  if (reply) return { kind: 'reply', reply };
+  return FAILED_OUTCOMES.has(outcome) ? { kind: 'failed' } : { kind: 'quiet' };
 }
