@@ -9,6 +9,7 @@ import type {
   TwitchSendMessage,
 } from '@pvtch/shared/twitch-queue';
 
+import { messageKey } from './lingo/message-key';
 import { translateChatMessage } from './lingo/pipeline';
 import { translateChatMessageV2 } from './lingo/pipeline-v2';
 
@@ -82,6 +83,17 @@ export async function handleLingualEvent(
   if (settings.ignoredChatters.includes(chatter)) return ack;
 
   if (now - message.timestamp > MAX_REPLY_AGE_MS) return ack;
+
+  // A repeated message is translated once: raids and copypasta would
+  // otherwise fill chat with the same reply. As with the claim above, a retry
+  // must not count as a repeat of itself.
+  if (attempts === 1) {
+    const key = await messageKey(event.message.fragments);
+    if (key) {
+      using cache = await channel.messageCache();
+      if (!(await cache.firstSeen(key))) return ack;
+    }
+  }
 
   const translateMessage = message.flags.includes(TRANSLATE_V2_FLAG)
     ? translateChatMessageV2

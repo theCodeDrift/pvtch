@@ -97,6 +97,29 @@ describe('handleLingualEvent', () => {
     expect(t.send).toHaveBeenCalledOnce();
   });
 
+  it('translates a repeated message once', async () => {
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { messageId: 'm-1' }),
+      1
+    );
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { messageId: 'm-2' }),
+      1
+    );
+
+    expect(t.ai).toHaveBeenCalledOnce();
+    expect(t.send).toHaveBeenCalledOnce();
+  });
+
+  it('does not count its own retry as a repeat', async () => {
+    await handleLingualEvent(t.env, handlerEvent(), 1);
+    await handleLingualEvent(t.env, handlerEvent(), 2);
+
+    expect(t.send).toHaveBeenCalledTimes(2);
+  });
+
   it('does not claim again on its own retry', async () => {
     t.channel(BROADCASTER_ID).claimed.add('lingual:m-1');
 

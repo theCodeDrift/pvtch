@@ -1,6 +1,7 @@
 import { useMemo, useEffect } from 'react';
-import { useFetcher, useLoaderData, data, redirect } from 'react-router';
+import { Link, useFetcher, useLoaderData, data, redirect } from 'react-router';
 import { useForm } from '@tanstack/react-form';
+import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Route } from './+types/lingo';
 import {
@@ -231,6 +232,19 @@ export default function HelpersLingo() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Lingo Translator</h1>
+      <div
+        role="status"
+        className="flex gap-3 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 mb-6 text-sm"
+      >
+        <TriangleAlert className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <p>
+          This page is deprecated and will be retired on December 6, 2026.{' '}
+          <Link to="/bots/lingual" className="underline underline-offset-2">
+            Lingual
+          </Link>{' '}
+          replaces it. Your translate URL keeps working for now.
+        </p>
+      </div>
       <p className="text-muted-foreground mb-6">
         Real-time translation for your Twitch chat. Connect with viewers who
         speak different languages by auto-translating their messages using
