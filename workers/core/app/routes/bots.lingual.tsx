@@ -349,8 +349,11 @@ export default function BotsLingual() {
                 </p>
               )}
               <p>
-                Making @{loaderData.botLogin} a moderator lets it reply faster
-                in busy chats.
+                Run{' '}
+                <code className="bg-muted px-1 rounded">
+                  /mod {loaderData.botLogin}
+                </code>{' '}
+                so it can reply faster in busy chats
               </p>
             </CardContent>
             <CardFooter>
