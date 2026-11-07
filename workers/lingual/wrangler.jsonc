@@ -29,6 +29,41 @@
     "binding": "AI",
   },
 
+  /**
+   * The v2 translation flow, used by channels with lingual.translate-v2.
+   *   DETECTOR_API              "decisions" for decisions models, else "chat"
+   *   DETECTOR_MODEL            provider/model
+   *   MAX_TARGET_PROBABILITY    translate at or below this score that the
+   *                             message is in the target language. Scores are
+   *                             model-specific: change it with the detector.
+   *                             Decider puts foreign text at about 0.001 to
+   *                             0.07, and "merci" or "c'est la vie" from 0.16.
+   *   TRANSLATOR_MODEL          provider/model
+   *   DISABLE_THINKING          "true" sends reasoning off. The models must
+   *                             support it, or requests find no endpoint.
+   * An invalid value keeps v2 quiet. Check a new pair at /evals in the harness.
+   */
+  "vars": {
+    "LINGUAL_V2_DETECTOR_API": "decisions",
+    "LINGUAL_V2_DETECTOR_MODEL": "perplexity/pplx-decider-v1.2",
+    "LINGUAL_V2_MAX_TARGET_PROBABILITY": "0.1",
+    "LINGUAL_V2_TRANSLATOR_MODEL": "google/gemma-3-12b-it",
+    "LINGUAL_V2_DISABLE_THINKING": "false",
+  },
+
+  /**
+   * Account-level Secrets Store. Read it with readSecret() from
+   * @pvtch/shared/secrets: a store binding is an object with an async get().
+   * PVTCH_OPENROUTER_API_KEY must exist in the store before this worker deploys.
+   */
+  "secrets_store_secrets": [
+    {
+      "binding": "PVTCH_OPENROUTER_API_KEY",
+      "store_id": "a50693a341154908beed43817b887121",
+      "secret_name": "PVTCH_OPENROUTER_API_KEY",
+    },
+  ],
+
   "durable_objects": {
     "bindings": [
       {

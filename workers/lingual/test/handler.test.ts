@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { consume } from '../src/consumer';
-import { handleLingualEvent } from '../src/handler';
+import {
+  NO_THREAD_FLAG,
+  TRANSLATE_V2_FLAG,
+  handleLingualEvent,
+} from '../src/handler';
+import { translateChatMessageV2 } from '../src/lingo/pipeline-v2';
 import {
   BROADCASTER_ID,
   aiResponse,
@@ -10,6 +15,8 @@ import {
   handlerEvent,
   type TestEnv,
 } from './helpers/fakes';
+
+vi.mock('../src/lingo/pipeline-v2');
 
 const NOW = new Date('2026-10-23T12:00:00.000Z').getTime();
 
@@ -52,6 +59,34 @@ describe('handleLingualEvent', () => {
       replyParentMessageId: 'msg-1',
       timestamp: NOW,
     });
+  });
+
+  it('posts a plain message with the no-thread flag', async () => {
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { flags: [NO_THREAD_FLAG] }),
+      1
+    );
+
+    expect(t.send).toHaveBeenCalledWith(
+      // eslint-disable-next-line unicorn/no-null -- schema: null means no thread
+      expect.objectContaining({ replyParentMessageId: null })
+    );
+  });
+
+  it('uses the OpenRouter flow with the translate-v2 flag', async () => {
+    vi.mocked(translateChatMessageV2).mockResolvedValue('hi from v2');
+
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
+      1
+    );
+
+    expect(t.ai).not.toHaveBeenCalled();
+    expect(t.send).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'hi from v2' })
+    );
   });
 
   it('acts once when the same fan-out arrives twice', async () => {

@@ -26,6 +26,14 @@ export class FakeChannel {
 
 export const BROADCASTER_ID = 'b-123';
 
+export const V2_VARS = {
+  LINGUAL_V2_DETECTOR_API: 'decisions',
+  LINGUAL_V2_DETECTOR_MODEL: 'lab/default-decider',
+  LINGUAL_V2_TRANSLATOR_MODEL: 'lab/default-translator',
+  LINGUAL_V2_MAX_TARGET_PROBABILITY: '0.1',
+  LINGUAL_V2_DISABLE_THINKING: 'false',
+};
+
 export interface TestEnv {
   env: Env;
   channel: (id: string) => FakeChannel;
@@ -47,6 +55,7 @@ export function createTestEnv(): TestEnv {
   const ai = vi.fn();
 
   const env = {
+    ...V2_VARS,
     TWITCH_EVENTS: { send },
     AI: { run: ai },
     TWITCH_CHANNEL: {

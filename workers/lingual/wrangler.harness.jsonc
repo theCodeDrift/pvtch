@@ -1,0 +1,57 @@
+/**
+ * Lingual dev harness (local only, never deployed)
+ *
+ * Puts a fake chat message on `lingual-events`, so the real pvtch-lingual and
+ * pvtch-twitch workers handle it. See "Dev harness" in
+ * workers/lingual/README.md.
+ *
+ * Start it with `pnpm --filter @pvtch/lingual harness`. Nothing deploys this
+ * config: `pnpm deploy` and the deploy workflow read wrangler.jsonc.
+ */
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pvtch-lingual-harness",
+  "account_id": "bda0488147d6159dfe8913c8ee9d2413",
+  "main": "./src/dev/harness.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-04-01",
+  "workers_dev": false,
+
+  // Keep in step with wrangler.jsonc: /evals starts from these defaults.
+  "vars": {
+    "LINGUAL_V2_DETECTOR_API": "decisions",
+    "LINGUAL_V2_DETECTOR_MODEL": "perplexity/pplx-decider-v1.2",
+    "LINGUAL_V2_MAX_TARGET_PROBABILITY": "0.1",
+    "LINGUAL_V2_TRANSLATOR_MODEL": "google/gemma-3-12b-it",
+    "LINGUAL_V2_DISABLE_THINKING": "false",
+  },
+
+  // The /evals page calls OpenRouter from here.
+  "secrets_store_secrets": [
+    {
+      "binding": "PVTCH_OPENROUTER_API_KEY",
+      "store_id": "a50693a341154908beed43817b887121",
+      "secret_name": "PVTCH_OPENROUTER_API_KEY",
+    },
+  ],
+
+  // Sets the channel's target language in local state.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TWITCH_CHANNEL",
+        "class_name": "TwitchChannel",
+        "script_name": "pvtch-storage",
+      },
+    ],
+  },
+
+  "queues": {
+    "producers": [
+      {
+        "queue": "lingual-events",
+        "binding": "LINGUAL_EVENTS",
+      },
+    ],
+  },
+}
