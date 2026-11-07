@@ -192,7 +192,13 @@ function StatusBadge({
   );
 }
 
-function LingualSettingsForm({ language }: { language: string }) {
+function LingualSettingsForm({
+  language,
+  botLogin,
+}: {
+  language: string;
+  botLogin: string;
+}) {
   const fetcher = useFetcher<typeof action>();
   const saving = fetcher.state !== 'idle';
 
@@ -232,7 +238,9 @@ function LingualSettingsForm({ language }: { language: string }) {
         }}
         children={(field) => (
           <Field>
-            <FieldLabel htmlFor="lingual-language">Your language</FieldLabel>
+            <FieldLabel htmlFor="lingual-language">
+              Translate messages to
+            </FieldLabel>
             <LanguageCombobox
               id="lingual-language"
               value={field.state.value}
@@ -245,8 +253,8 @@ function LingualSettingsForm({ language }: { language: string }) {
               </p>
             ) : (
               <FieldDescription>
-                Lingual translates messages that aren&apos;t in this language
-                into it.
+                {botLogin} will translate messages to your requested language
+                when it thinks it will help.
               </FieldDescription>
             )}
           </Field>
@@ -384,7 +392,10 @@ export default function BotsLingual() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LingualSettingsForm language={loaderData.language} />
+              <LingualSettingsForm
+                language={loaderData.language}
+                botLogin={loaderData.botLogin}
+              />
             </CardContent>
           </Card>
         )}
