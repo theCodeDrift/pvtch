@@ -224,6 +224,57 @@ describe('TwitchChannel', () => {
       expect(pendingJobs('sync-subscriptions:pvtchbot')).toHaveLength(0);
     });
 
+    it('keeps reconciling after the last disable while records remain', async () => {
+      channel.enableHandler('lingual');
+      channel.setSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+      await channel.alarm();
+      send.mockClear();
+
+      channel.disableHandler('lingual');
+      expect(pendingJobs(reconcileTask)).toHaveLength(1);
+      await channel.alarm();
+      send.mockClear();
+
+      // The cleanup sync failed: the record stays, so the cron syncs again.
+      vi.setSystemTime(new Date('2026-10-23T18:00:00Z'));
+      await channel.alarm();
+      expect(send).toHaveBeenCalledOnce();
+      expect(pendingJobs(reconcileTask)).toHaveLength(1);
+
+      // A later sync clears the record: the next run cancels the cron.
+      channel.clearSubscriptionIfMatches('pvtchbot', CHAT, 'abc');
+      send.mockClear();
+      vi.setSystemTime(new Date('2026-10-24T00:00:00Z'));
+      await channel.alarm();
+
+      expect(send).not.toHaveBeenCalled();
+      expect(pendingJobs(reconcileTask)).toHaveLength(0);
+    });
+
+    it('a revocation requests a sync while a handler wants the sender', async () => {
+      channel.enableHandler('lingual');
+      channel.setSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+      await channel.alarm();
+      send.mockClear();
+
+      expect(channel.subscriptionRevoked('pvtchbot', CHAT, 'abc')).toBe(true);
+      await channel.alarm();
+
+      expect(channel.getSubscription('pvtchbot', CHAT)).toBeNull();
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'sync', senderId: 'pvtchbot' })
+      );
+    });
+
+    it('a revocation requests nothing when no handler wants the sender', async () => {
+      channel.setSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+
+      channel.subscriptionRevoked('pvtchbot', CHAT, 'abc');
+      await channel.alarm();
+
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it('the reconcile cron requests a sync', async () => {
       channel.enableHandler('lingual');
       await channel.alarm();
@@ -281,6 +332,98 @@ describe('TwitchChannel', () => {
 
       channel.clearSubscription('pvtchbot', CHAT);
 
+      expect(channel.getSubscription('pvtchbot', CHAT)).toBeNull();
+    });
+
+    it('records a created subscription', () => {
+      channel.recordSubscription(
+        'pvtchbot',
+        CHAT,
+        'abc',
+        'webhook_callback_verification_pending'
+      );
+
+      expect(channel.getSubscription('pvtchbot', CHAT)).toMatchObject({
+        subscriptionId: 'abc',
+        status: 'webhook_callback_verification_pending',
+      });
+    });
+
+    it('does not downgrade a confirmed subscription to pending', () => {
+      expect(channel.confirmSubscription('pvtchbot', CHAT, 'abc')).toBe(true);
+
+      channel.recordSubscription(
+        'pvtchbot',
+        CHAT,
+        'abc',
+        'webhook_callback_verification_pending'
+      );
+
+      expect(channel.getSubscription('pvtchbot', CHAT)?.status).toBe('enabled');
+    });
+
+    it('replaces the record when a different subscription is created', () => {
+      channel.setSubscription('pvtchbot', CHAT, 'old', 'enabled');
+
+      channel.recordSubscription(
+        'pvtchbot',
+        CHAT,
+        'new',
+        'webhook_callback_verification_pending'
+      );
+
+      expect(channel.getSubscription('pvtchbot', CHAT)).toMatchObject({
+        subscriptionId: 'new',
+        status: 'webhook_callback_verification_pending',
+      });
+    });
+
+    it('confirms only the recorded subscription', () => {
+      channel.setSubscription(
+        'pvtchbot',
+        CHAT,
+        'new',
+        'webhook_callback_verification_pending'
+      );
+
+      expect(channel.confirmSubscription('pvtchbot', CHAT, 'old')).toBe(false);
+      expect(channel.getSubscription('pvtchbot', CHAT)).toMatchObject({
+        subscriptionId: 'new',
+        status: 'webhook_callback_verification_pending',
+      });
+
+      expect(channel.confirmSubscription('pvtchbot', CHAT, 'new')).toBe(true);
+      expect(channel.getSubscription('pvtchbot', CHAT)?.status).toBe('enabled');
+    });
+
+    it('updates status only while the record holds the id', () => {
+      channel.setSubscription('pvtchbot', CHAT, 'new', 'enabled');
+
+      expect(
+        channel.updateSubscriptionStatus('pvtchbot', CHAT, 'old', 'revoked')
+      ).toBe(false);
+      expect(channel.getSubscription('pvtchbot', CHAT)?.status).toBe('enabled');
+
+      expect(
+        channel.updateSubscriptionStatus('pvtchbot', CHAT, 'new', 'revoked')
+      ).toBe(true);
+      expect(channel.getSubscription('pvtchbot', CHAT)?.status).toBe('revoked');
+    });
+
+    it('clears only a record holding the id', () => {
+      channel.setSubscription('pvtchbot', CHAT, 'new', 'enabled');
+
+      expect(channel.clearSubscriptionIfMatches('pvtchbot', CHAT, 'old')).toBe(
+        false
+      );
+      expect(channel.subscriptionRevoked('pvtchbot', CHAT, 'old')).toBe(false);
+      expect(channel.getSubscription('pvtchbot', CHAT)?.subscriptionId).toBe(
+        'new'
+      );
+
+      expect(channel.clearSubscriptionIfMatches('pvtchbot', CHAT, 'new')).toBe(
+        true
+      );
       expect(channel.getSubscription('pvtchbot', CHAT)).toBeNull();
     });
 

@@ -191,6 +191,58 @@ describe('POST /eventsub', () => {
       channel.getSubscription('pvtchbot', 'channel.chat.message')
     ).toBeNull();
     expect(channel.listHandlers()).toEqual(['lingual']);
+    // Recreated now, not at the next reconcile.
+    expect(channel.syncRequests).toEqual(['pvtchbot']);
+  });
+
+  it('ignores a late challenge for a replaced subscription', async () => {
+    const channel = t.channel(BROADCASTER_ID);
+    channel.setSubscription(
+      'pvtchbot',
+      'channel.chat.message',
+      'sub-2',
+      'webhook_callback_verification_pending'
+    );
+    const body = JSON.stringify({
+      challenge: 'abc123',
+      subscription: subscription({
+        status: 'webhook_callback_verification_pending',
+      }),
+    });
+
+    const response = await handleEventSub(
+      eventSubRequest('webhook_callback_verification', body),
+      t.env
+    );
+
+    expect(await response.text()).toBe('abc123');
+    expect(
+      channel.getSubscription('pvtchbot', 'channel.chat.message')
+    ).toMatchObject({
+      subscriptionId: 'sub-2',
+      status: 'webhook_callback_verification_pending',
+    });
+  });
+
+  it('keeps the replacement record on a late revocation of an old subscription', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const channel = t.channel(BROADCASTER_ID);
+    channel.enableHandler('lingual');
+    channel.setSubscription(
+      'pvtchbot',
+      'channel.chat.message',
+      'sub-2',
+      'enabled'
+    );
+    const body = JSON.stringify({
+      subscription: subscription({ status: 'notification_failures_exceeded' }),
+    });
+
+    await handleEventSub(eventSubRequest('revocation', body), t.env);
+
+    expect(
+      channel.getSubscription('pvtchbot', 'channel.chat.message')
+    ).toMatchObject({ subscriptionId: 'sub-2' });
   });
 
   it('enqueues a notification and returns 204', async () => {

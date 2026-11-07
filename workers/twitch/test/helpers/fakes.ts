@@ -80,6 +80,73 @@ export class FakeChannel {
   clearSubscription(senderId: SenderId, type: string) {
     this.subscriptions.delete(`${senderId}/${type}`);
   }
+  recordSubscription(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string,
+    status: string
+  ) {
+    const current = this.getSubscription(senderId, type);
+    const keepEnabled =
+      current?.subscriptionId === subscriptionId &&
+      current.status === 'enabled' &&
+      status === 'webhook_callback_verification_pending';
+    this.setSubscription(
+      senderId,
+      type,
+      subscriptionId,
+      keepEnabled ? 'enabled' : status
+    );
+  }
+  updateSubscriptionStatus(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string,
+    status: string
+  ) {
+    if (this.getSubscription(senderId, type)?.subscriptionId !== subscriptionId)
+      return false;
+    this.setSubscription(senderId, type, subscriptionId, status);
+    return true;
+  }
+  confirmSubscription(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ) {
+    const current = this.getSubscription(senderId, type);
+    if (current && current.subscriptionId !== subscriptionId) return false;
+    this.setSubscription(senderId, type, subscriptionId, 'enabled');
+    return true;
+  }
+  clearSubscriptionIfMatches(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ) {
+    if (this.getSubscription(senderId, type)?.subscriptionId !== subscriptionId)
+      return false;
+    this.clearSubscription(senderId, type);
+    return true;
+  }
+  /** Sync requests the real channel would schedule, by sender. */
+  syncRequests: SenderId[] = [];
+  subscriptionRevoked(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ) {
+    const cleared = this.clearSubscriptionIfMatches(
+      senderId,
+      type,
+      subscriptionId
+    );
+    if (
+      this.listHandlers().some((id) => TWITCH_HANDLERS[id].sender === senderId)
+    )
+      this.syncRequests.push(senderId);
+    return cleared;
+  }
   claim(key: string) {
     if (this.claimed.has(key)) return false;
     this.claimed.add(key);

@@ -84,6 +84,50 @@ describe('subscription sync', () => {
       });
     });
 
+    it('keeps the enabled status of a challenge that beat the create response', async () => {
+      mockFetch(
+        appTokenRoute,
+        route('POST', '/helix/eventsub/subscriptions', () => {
+          t.channel(BROADCASTER_ID).confirmSubscription(
+            CHAT.senderId,
+            TYPE,
+            's-1'
+          );
+          return Response.json(
+            { data: [sub('s-1', 'webhook_callback_verification_pending')] },
+            { status: 202 }
+          );
+        })
+      );
+
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
+
+      expect(record()).toMatchObject({
+        subscriptionId: 's-1',
+        status: 'enabled',
+      });
+    });
+
+    it('retries when a 409 lists no existing subscription', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockFetch(
+        appTokenRoute,
+        route(
+          'POST',
+          '/helix/eventsub/subscriptions',
+          () => new Response(undefined, { status: 409 })
+        ),
+        route('GET', '/helix/eventsub/subscriptions', () =>
+          Response.json({ data: [] })
+        )
+      );
+
+      const outcome = await sync(t.env, BROADCASTER_ID, 'pvtchbot');
+
+      expect(outcome.type).toBe('retry');
+      expect(record()).toBeNull();
+    });
+
     it('records the existing subscription on a 409', async () => {
       mockFetch(
         appTokenRoute,
@@ -239,6 +283,35 @@ describe('subscription sync', () => {
       });
       expect(deleted).toEqual(['s-1', 's-2']);
       expect(record()).toBeNull();
+    });
+
+    it('keeps a record replaced while the delete was in flight', async () => {
+      t.channel(BROADCASTER_ID).disableHandler('lingual');
+      t.channel(BROADCASTER_ID).setSubscription(
+        CHAT.senderId,
+        TYPE,
+        's-1',
+        'enabled'
+      );
+      mockFetch(
+        appTokenRoute,
+        route('GET', '/helix/eventsub/subscriptions', () =>
+          Response.json({ data: [sub('s-1')] })
+        ),
+        route('DELETE', '/helix/eventsub/subscriptions', () => {
+          t.channel(BROADCASTER_ID).setSubscription(
+            CHAT.senderId,
+            TYPE,
+            's-2',
+            'enabled'
+          );
+          return new Response(undefined, { status: 204 });
+        })
+      );
+
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
+
+      expect(record()?.subscriptionId).toBe('s-2');
     });
 
     it('makes no Helix calls when nothing is recorded', async () => {

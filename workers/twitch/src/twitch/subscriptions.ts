@@ -13,6 +13,9 @@ import { helix, rateLimitResetSeconds } from './helix';
 
 const subscriptionList = z.object({ data: z.array(subscription) });
 
+/** How long to wait when Twitch reports a conflict but lists nothing. */
+const CONFLICT_RETRY_SECONDS = 30;
+
 /** Statuses for a subscription that is working or about to be. */
 const HEALTHY = new Set(['enabled', 'webhook_callback_verification_pending']);
 
@@ -65,9 +68,10 @@ async function listLive(
 
 /**
  * Create the subscription for this sender and type. A 409 means it already
- * exists, so the existing one is recorded instead. A 403 means the
- * broadcaster hasn't granted `channel:bot` (or the sender account hasn't
- * authorized), so every handler using the sender is disabled.
+ * exists, so the existing one is recorded instead; if the listing doesn't
+ * show it yet, the sync retries. A 403 means the broadcaster hasn't granted
+ * `channel:bot` (or the sender account hasn't authorized), so every handler
+ * using the sender is disabled.
  */
 async function create(
   env: Env,
@@ -110,6 +114,14 @@ async function create(
       return stop(failure(existing.response, 'List subscriptions'));
     }
     created = existing.data[0];
+    if (!created) {
+      console.warn('Subscription conflict but none listed; retrying', {
+        broadcasterId,
+        senderId,
+        type,
+      });
+      return stop(retryIn(CONFLICT_RETRY_SECONDS));
+    }
   } else if (response.ok) {
     created = subscriptionList.parse(await response.json()).data[0];
   } else {
@@ -117,23 +129,22 @@ async function create(
   }
   if (!created) return DONE;
 
-  // The verification challenge can land before this response does. Don't
-  // overwrite its `enabled` with the older pending status.
-  const current = await channel.getSubscription(senderId, type);
-  if (current?.subscriptionId !== created.id || current.status !== 'enabled') {
-    await channel.setSubscription(senderId, type, created.id, created.status);
-  }
+  // Atomic in the channel: an `enabled` set by a challenge that beat this
+  // response is kept.
+  await channel.recordSubscription(senderId, type, created.id, created.status);
   return DONE;
 }
 
 /** Delete every subscription Twitch holds for this sender and type, and
- * clear the record. */
+ * clear the record if it still holds `recordedId`, the subscription this
+ * sync read. A record replaced meanwhile is left alone. */
 async function remove(
   env: Env,
   channel: Channel,
   broadcasterId: string,
   senderId: SenderId,
-  type: string
+  type: string,
+  recordedId: string
 ): Promise<Step> {
   const existing = await listLive(env, broadcasterId, senderId, type);
   if (!existing.data) {
@@ -149,7 +160,7 @@ async function remove(
       return stop(failure(response, 'Delete subscription'));
     }
   }
-  await channel.clearSubscription(senderId, type);
+  await channel.clearSubscriptionIfMatches(senderId, type, recordedId);
   return DONE;
 }
 
@@ -174,13 +185,25 @@ async function ensure(
 
   if (live && HEALTHY.has(live.status)) {
     if (live.status !== record.status) {
-      await channel.setSubscription(senderId, type, live.id, live.status);
+      await channel.updateSubscriptionStatus(
+        senderId,
+        type,
+        record.subscriptionId,
+        live.status
+      );
     }
     return DONE;
   }
 
   // Missing or failed: remove whatever is left, then subscribe again.
-  const cleared = await remove(env, channel, broadcasterId, senderId, type);
+  const cleared = await remove(
+    env,
+    channel,
+    broadcasterId,
+    senderId,
+    type,
+    record.subscriptionId
+  );
   if (!cleared.done) return cleared;
   return create(env, channel, broadcasterId, senderId, type);
 }
@@ -211,7 +234,8 @@ export async function sync(
       channel,
       broadcasterId,
       senderId,
-      record.type
+      record.type,
+      record.subscriptionId
     );
     if (!step.done) return step.outcome;
   }

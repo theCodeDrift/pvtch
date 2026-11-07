@@ -78,6 +78,9 @@ const PRUNE_DEDUPE_TASK = 'prune-dedupe';
 export const RECONCILE_CRON = '0 */6 * * *';
 
 const SYNC_TASK_PREFIX = 'sync-subscriptions:';
+
+/** Twitch's status for a subscription awaiting its callback challenge. */
+const VERIFICATION_PENDING = 'webhook_callback_verification_pending';
 const RECONCILE_TASK_PREFIX = 'reconcile-subscriptions:';
 
 /**
@@ -221,6 +224,8 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     }));
   }
 
+  /** Unconditional write. Superseded by the compare-and-set methods below;
+   * kept until no deployed pvtch-twitch calls it. */
   setSubscription(
     senderId: SenderId,
     type: string,
@@ -242,12 +247,146 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     );
   }
 
+  /** Unconditional clear. Superseded by `clearSubscriptionIfMatches`;
+   * kept until no deployed pvtch-twitch calls it. */
   clearSubscription(senderId: SenderId, type: string): void {
     this.sql.exec(
       `DELETE FROM subscriptions WHERE sender_id = ? AND type = ?`,
       assertSender(senderId),
       type
     );
+  }
+
+  /**
+   * Record a subscription the sync just created (or found on a 409). The
+   * verification challenge can land before the create response does, so
+   * an `enabled` record for the same id is not downgraded to pending. One
+   * statement, so a challenge can't slip in between a read and the write.
+   */
+  recordSubscription(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string,
+    status: string
+  ): void {
+    this.sql.exec(
+      `INSERT INTO subscriptions (sender_id, type, subscription_id, status, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(sender_id, type) DO UPDATE SET
+         status = CASE
+           WHEN subscriptions.subscription_id = excluded.subscription_id
+             AND subscriptions.status = 'enabled'
+             AND excluded.status = ?
+           THEN subscriptions.status
+           ELSE excluded.status
+         END,
+         subscription_id = excluded.subscription_id,
+         updated_at = excluded.updated_at`,
+      assertSender(senderId),
+      type,
+      subscriptionId,
+      status,
+      Date.now(),
+      VERIFICATION_PENDING
+    );
+  }
+
+  /**
+   * Update the status of the recorded subscription, only while the record
+   * still holds `subscriptionId`. Returns whether it did.
+   */
+  updateSubscriptionStatus(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string,
+    status: string
+  ): boolean {
+    return (
+      queryRows(
+        this.sql,
+        `UPDATE subscriptions SET status = ?, updated_at = ?
+         WHERE sender_id = ? AND type = ? AND subscription_id = ?
+         RETURNING type`,
+        status,
+        Date.now(),
+        assertSender(senderId),
+        type,
+        subscriptionId
+      ).length > 0
+    );
+  }
+
+  /**
+   * Twitch verified the callback for `subscriptionId`: mark it enabled.
+   * Records it when nothing is recorded yet (the challenge beat the create
+   * response); a record holding a different id is newer and left alone.
+   * Returns whether the record now holds this subscription.
+   */
+  confirmSubscription(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ): boolean {
+    return (
+      queryRows(
+        this.sql,
+        `INSERT INTO subscriptions (sender_id, type, subscription_id, status, updated_at)
+         VALUES (?, ?, ?, 'enabled', ?)
+         ON CONFLICT(sender_id, type) DO UPDATE SET
+           status = 'enabled',
+           updated_at = excluded.updated_at
+           WHERE subscriptions.subscription_id = excluded.subscription_id
+         RETURNING type`,
+        assertSender(senderId),
+        type,
+        subscriptionId,
+        Date.now()
+      ).length > 0
+    );
+  }
+
+  /**
+   * Clear the record only while it still holds `subscriptionId`, so a late
+   * delete or revocation for an old subscription can't wipe its
+   * replacement. Returns whether it did.
+   */
+  clearSubscriptionIfMatches(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ): boolean {
+    return (
+      queryRows(
+        this.sql,
+        `DELETE FROM subscriptions
+         WHERE sender_id = ? AND type = ? AND subscription_id = ?
+         RETURNING type`,
+        assertSender(senderId),
+        type,
+        subscriptionId
+      ).length > 0
+    );
+  }
+
+  /**
+   * Twitch revoked `subscriptionId`, for any reason. Clears its record if
+   * it is still the current one, and requests a sync while some handler
+   * still uses the sender, so a wanted subscription is recreated now
+   * rather than at the next reconcile. Returns whether the record was
+   * cleared.
+   */
+  subscriptionRevoked(
+    senderId: SenderId,
+    type: string,
+    subscriptionId: string
+  ): boolean {
+    const cleared = this.clearSubscriptionIfMatches(
+      senderId,
+      type,
+      subscriptionId
+    );
+    if (this.senderNeeded(senderId)) this.requestSync(senderId);
+    return cleared;
   }
 
   /**
@@ -397,21 +536,39 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
   }
 
   /** A handler using `senderId` changed state: sync its subscriptions now,
-   * and keep the reconcile cron only while some handler still needs it. */
+   * and keep the reconcile cron while some handler still needs it or
+   * subscription records remain to clean up. */
   private senderChanged(senderId: SenderId): void {
-    const syncTask = `${SYNC_TASK_PREFIX}${senderId}`;
-    this.scheduler.schedule(0, syncTask, {}, { key: syncTask });
+    this.requestSync(senderId);
 
     const reconcileTask = `${RECONCILE_TASK_PREFIX}${senderId}`;
-    const needed = this.listHandlers().some(
-      (id) => TWITCH_HANDLERS[id].sender === senderId
-    );
-    if (needed) {
+    if (this.reconcileNeeded(senderId)) {
       // The scheduler skips a task+cron pair that already exists.
       this.scheduler.schedule(RECONCILE_CRON, reconcileTask, {});
     } else {
       this.scheduler.cancel(reconcileTask, RECONCILE_CRON);
     }
+  }
+
+  private requestSync(senderId: SenderId): void {
+    const syncTask = `${SYNC_TASK_PREFIX}${senderId}`;
+    this.scheduler.schedule(0, syncTask, {}, { key: syncTask });
+  }
+
+  private senderNeeded(senderId: SenderId): boolean {
+    return this.listHandlers().some(
+      (id) => TWITCH_HANDLERS[id].sender === senderId
+    );
+  }
+
+  /** Reconcile while a handler uses the sender, and after the last one is
+   * disabled until a sync has removed every subscription it recorded: if
+   * the cleanup sync fails, the cron retries it instead of leaving the
+   * subscriptions orphaned on Twitch. */
+  private reconcileNeeded(senderId: SenderId): boolean {
+    return (
+      this.senderNeeded(senderId) || this.listSubscriptions(senderId).length > 0
+    );
   }
 
   private async sendSync(senderId: SenderId): Promise<void> {
@@ -440,6 +597,14 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
       if (!job.task.startsWith(prefix)) continue;
       const senderId = job.task.slice(prefix.length);
       if (isSenderId(senderId)) {
+        if (
+          prefix === RECONCILE_TASK_PREFIX &&
+          !this.reconcileNeeded(senderId)
+        ) {
+          // Cleanup is confirmed: nothing wants or holds a subscription.
+          this.scheduler.cancel(job.task, RECONCILE_CRON);
+          return;
+        }
         await this.sendSync(senderId);
         return;
       }
