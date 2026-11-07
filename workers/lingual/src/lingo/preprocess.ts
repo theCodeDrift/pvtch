@@ -4,7 +4,7 @@
 
 import type { ChatFragment } from '@pvtch/shared/twitch-eventsub';
 
-const URL_RE = /https?:\/\/\S+/gi;
+export const URL_RE = /https?:\/\/\S+/gi;
 const MENTION_RE = /@[a-z0-9_]{1,25}/gi;
 
 // A token looks like a Twitch-style emote if it has either:

@@ -138,6 +138,26 @@ describe('translateChatMessageV2', () => {
     expect(request.chatRequest.messages.at(-1)?.content).toBe('hola amigos');
   });
 
+  it('sends the translator no URLs', async () => {
+    await translateEvent(
+      chatEvent({
+        message: {
+          text: 'mira esto https://example.com/a amigos',
+          fragments: [
+            { type: 'text', text: 'mira esto https://example.com/a amigos' },
+          ],
+        },
+      })
+    );
+
+    const [request] = send.mock.calls[0] as [
+      { chatRequest: { messages: { role: string; content: string }[] } },
+    ];
+    expect(request.chatRequest.messages.at(-1)?.content).toBe(
+      'mira esto amigos'
+    );
+  });
+
   it('stays quiet when the translation repeats the message', async () => {
     send.mockResolvedValue(
       translation(

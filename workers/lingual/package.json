@@ -15,7 +15,7 @@
     "cf-typegen": "wrangler types -c wrangler.jsonc -c ../storage/wrangler.jsonc",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev -c wrangler.jsonc -c ../storage/wrangler.jsonc --persist-to ../../.wrangler",
-    "harness": "wrangler dev -c wrangler.harness.jsonc -c wrangler.jsonc -c ../twitch/wrangler.jsonc -c ../storage/wrangler.jsonc --persist-to ../../.wrangler --ip :: --port 8790",
+    "harness": "pnpm --package=wrangler@4.158.0 dlx wrangler dev -c wrangler.harness.jsonc -c wrangler.jsonc -c ../twitch/wrangler.jsonc -c ../storage/wrangler.jsonc --persist-to ../../.wrangler --ip :: --port 8790",
     "lint": "eslint src/ test/",
     "lint:fix": "eslint src/ test/ --fix",
     "test": "vitest run",
