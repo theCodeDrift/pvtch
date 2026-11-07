@@ -7,13 +7,14 @@ The `pvtch-lingual` worker: **Lingual**, the handler that translates Twitch chat
 ```
 lingual-events (from pvtch-twitch's router)
   ─▶ claim lingual:<messageId> on TwitchChannel (first attempt only)
-  ─▶ skip Shared Chat from other channels, commands, known bots, ignored chatters, stale messages
+  ─▶ skip Shared Chat from other channels, commands, known bots, stale messages
+  ─▶ skip repeats of a normalized message (channel.messageCache(), first attempt only)
   ─▶ channel.lingual().getSettings() ─▶ lingo pipeline ─▶ Workers AI
   ─▶ { kind: 'send', sendId: 'lingual:<messageId>', ... } on twitch-events
 ```
 
 - **Routing happens upstream.** `pvtch-twitch` only fans events out to `lingual-events` for channels with `lingual` enabled, and never forwards a pvtch bot's own messages.
-- **Sending happens upstream too.** Replies go back to `pvtch-twitch` as `send` requests; it applies the channel's rate limit for the sender (`botlingual`) and calls Helix.
+- **Sending happens upstream too.** Replies go back to `pvtch-twitch` as `send` requests; it applies the channel's rate limit for the sender (`pvtchbot`) and calls Helix.
 - **Translation flows:** `lingual.translate-v2` picks the flow per channel. Without it, a message takes **v1** below. **v2** (`pipeline-v2.ts`) asks a decision model whether all of the message is in the target language, and only translates when that probability is at or below a threshold. Past that point a translation is required, so a chat model translates without judging the language again. It doesn't receive native emotes or cheermotes, so they don't appear in the reply. Both go through OpenRouter, and any failure or uncertain answer stays quiet.
 - **Translation (v1):** `src/lingo/` is Lingual's own copy of Lingo detection. It reads EventSub message fragments, so native emotes and mentions are dropped exactly rather than guessed at. The language and ignore list are Lingual's own settings in the `TwitchChannel` `Lingual` plugin, separate from the Lingo helper's.
 - **Feature flags** arrive on each event as `flags` (`lingual.<feature>`); set them at `https://twitch.pvtch.com/admin/flags`. `lingual.no-thread` posts replies as plain messages.
@@ -38,7 +39,7 @@ Create `lingual-events` and `lingual-events-dlq` before the first deploy, and pu
 
 ## Dev harness
 
-A local form that sends a fake chat message through the real Lingual path. Enter a broadcaster's numeric Twitch ID and a message, and `botlingual` posts the English translation to that channel.
+A local form that sends a fake chat message through the real Lingual path. Enter a broadcaster's numeric Twitch ID and a message, and `pvtchbot` posts the English translation to that channel.
 
 ```bash
 pnpm --filter @pvtch/lingual harness   # http://localhost:8790, or the machine's LAN IP or .local name

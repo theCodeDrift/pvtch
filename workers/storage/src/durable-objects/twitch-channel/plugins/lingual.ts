@@ -6,8 +6,6 @@ import { queryRows } from '../../../helpers/query-rows';
 export interface LingualSettings {
   /** Target language as entered (name or ISO code); null until set. */
   language: string | null;
-  /** Lowercase Twitch logins Lingual never translates. */
-  ignoredChatters: string[];
 }
 
 const lingualMigrations: Migrations = {
@@ -38,40 +36,27 @@ export class Lingual extends RpcTarget {
   }
 
   getSettings(): LingualSettings {
-    const row = queryRows<{
-      language: string | null;
-      ignored_chatters: string;
-    }>(this.sql, `SELECT language, ignored_chatters FROM lingual_config`)[0];
+    const row = queryRows<{ language: string | null }>(
+      this.sql,
+      `SELECT language FROM lingual_config`
+    )[0];
     return {
       // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
       language: row?.language ?? null,
-      ignoredChatters: row
-        ? (JSON.parse(row.ignored_chatters) as string[])
-        : [],
     };
   }
 
-  /** Replace the settings. Chatter logins are lowercased, stripped of a
-   * leading "@", and de-duplicated. The caller validates the language. */
+  /** Replace the settings. The caller validates the language. */
   setSettings(settings: LingualSettings): LingualSettings {
     // eslint-disable-next-line unicorn/no-null -- SQL NULL clears the language
     const language = settings.language?.trim().toLowerCase() || null;
-    const ignoredChatters = [
-      ...new Set(
-        settings.ignoredChatters
-          .map((login) => login.trim().replace(/^@/, '').toLowerCase())
-          .filter((login) => login.length > 0)
-      ),
-    ];
     this.sql.exec(
-      `INSERT INTO lingual_config (id, language, ignored_chatters, updated_at)
-       VALUES (1, ?, ?, ?)
+      `INSERT INTO lingual_config (id, language, updated_at)
+       VALUES (1, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          language = excluded.language,
-         ignored_chatters = excluded.ignored_chatters,
          updated_at = excluded.updated_at`,
       language,
-      JSON.stringify(ignoredChatters),
       Date.now()
     );
     return this.getSettings();

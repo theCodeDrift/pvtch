@@ -123,7 +123,7 @@ describe('POST /eventsub', () => {
     expect(
       t
         .channel(BROADCASTER_ID)
-        .getSubscription('botlingual', 'channel.chat.message')
+        .getSubscription('pvtchbot', 'channel.chat.message')
     ).toMatchObject({ subscriptionId: 'sub-1', status: 'enabled' });
   });
 
@@ -150,7 +150,7 @@ describe('POST /eventsub', () => {
     const channel = t.channel(BROADCASTER_ID);
     channel.enableHandler('lingual');
     channel.setSubscription(
-      'botlingual',
+      'pvtchbot',
       'channel.chat.message',
       'sub-1',
       'enabled'
@@ -166,7 +166,7 @@ describe('POST /eventsub', () => {
 
     expect(response.status).toBe(204);
     expect(
-      channel.getSubscription('botlingual', 'channel.chat.message')
+      channel.getSubscription('pvtchbot', 'channel.chat.message')
     ).toBeNull();
     expect(channel.listHandlers()).toEqual([]);
   });
@@ -176,7 +176,7 @@ describe('POST /eventsub', () => {
     const channel = t.channel(BROADCASTER_ID);
     channel.enableHandler('lingual');
     channel.setSubscription(
-      'botlingual',
+      'pvtchbot',
       'channel.chat.message',
       'sub-1',
       'enabled'
@@ -188,7 +188,7 @@ describe('POST /eventsub', () => {
     await handleEventSub(eventSubRequest('revocation', body), t.env);
 
     expect(
-      channel.getSubscription('botlingual', 'channel.chat.message')
+      channel.getSubscription('pvtchbot', 'channel.chat.message')
     ).toBeNull();
     expect(channel.listHandlers()).toEqual(['lingual']);
   });

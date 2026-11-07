@@ -6,11 +6,9 @@ import { normalizeKey } from '@/lib/normalize-key';
 import { isSameLanguage, translate } from '@/lib/translator';
 import { type LingoConfig } from '@/lib/constants/lingo';
 import type { LingoPluginConfig } from '../../do/plugins/lingo';
-import { knownBots } from '@pvtch/shared/known-bots';
+import { isKnownBot } from '@pvtch/shared/known-bots';
 import { createLogger } from '@/lib/logger';
 import { decide } from '@/lib/lang-detect/decision';
-
-const ALWAYS_IGNORED_USERS = new Set(knownBots.map((v) => v.toLowerCase()));
 
 interface TranslateRequestContent {
   message?: string;
@@ -35,7 +33,7 @@ async function handleTranslate(
   });
 
   // skip always ignored users
-  if (ALWAYS_IGNORED_USERS.has(userTrimmed.toLowerCase())) {
+  if (isKnownBot(userTrimmed)) {
     logger.debug('User is in always ignored bots list', { user: userTrimmed });
     return new Response('', { status: 200 });
   }

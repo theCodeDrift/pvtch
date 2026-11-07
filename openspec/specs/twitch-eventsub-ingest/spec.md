@@ -54,8 +54,8 @@ For message type `webhook_callback_verification`, the handler SHALL respond HTTP
 
 #### Scenario: Recorded for the sender
 
-- **WHEN** a verified challenge arrives for a `channel.chat.message` subscription whose `condition.user_id` is botlingual
-- **THEN** `getSubscription('botlingual', 'channel.chat.message')` on that broadcaster's channel has status `enabled`
+- **WHEN** a verified challenge arrives for a `channel.chat.message` subscription whose `condition.user_id` is pvtchbot
+- **THEN** `getSubscription('pvtchbot', 'channel.chat.message')` on that broadcaster's channel has status `enabled`
 
 ### Requirement: Revocation handled inline
 
@@ -63,12 +63,12 @@ For message type `revocation`, the handler SHALL resolve the sender from `condit
 
 #### Scenario: Broadcaster revokes authorization
 
-- **WHEN** a verified revocation with status `authorization_revoked` arrives for broadcaster `123` and botlingual
-- **THEN** `TwitchChannel(twitch:123)` has no botlingual subscription and `getHandler('lingual').enabled` is false
+- **WHEN** a verified revocation with status `authorization_revoked` arrives for broadcaster `123` and pvtchbot
+- **THEN** `TwitchChannel(twitch:123)` has no pvtchbot subscription and `getHandler('lingual').enabled` is false
 
 #### Scenario: Delivery failures revoke subscription
 
-- **WHEN** a verified revocation with status `notification_failures_exceeded` arrives for broadcaster `123` and botlingual
+- **WHEN** a verified revocation with status `notification_failures_exceeded` arrives for broadcaster `123` and pvtchbot
 - **THEN** the subscription record is cleared and `lingual` remains enabled
 
 ### Requirement: Notifications are enqueued then acknowledged
@@ -111,7 +111,7 @@ The `twitch-events` consumer in `pvtch-twitch` SHALL run with `max_batch_size: 1
 #### Scenario: Handler and sender state
 
 - **WHEN** an admin requests `/admin/status` for a channel with `lingual` enabled
-- **THEN** the JSON includes `lingual`'s state and botlingual's `channel.chat.message` subscription record
+- **THEN** the JSON includes `lingual`'s state and pvtchbot's `channel.chat.message` subscription record
 
 ### Requirement: Admin feature flags
 

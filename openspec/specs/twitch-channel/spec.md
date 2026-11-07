@@ -40,18 +40,18 @@ The storage worker SHALL provide a SQLite-backed `TwitchChannel` Durable Object 
 
 #### Scenario: Record a subscription
 
-- **WHEN** `setSubscription('botlingual', 'channel.chat.message', 'abc', 'webhook_callback_verification_pending')` is called
-- **THEN** `getSubscription('botlingual', 'channel.chat.message')` returns that id and status
+- **WHEN** `setSubscription('pvtchbot', 'channel.chat.message', 'abc', 'webhook_callback_verification_pending')` is called
+- **THEN** `getSubscription('pvtchbot', 'channel.chat.message')` returns that id and status
 
 #### Scenario: Status update
 
-- **WHEN** `setSubscription('botlingual', 'channel.chat.message', 'abc', 'enabled')` is called for an existing record
+- **WHEN** `setSubscription('pvtchbot', 'channel.chat.message', 'abc', 'enabled')` is called for an existing record
 - **THEN** the status becomes `enabled` and `updatedAt` advances
 
 #### Scenario: Revocation clears
 
-- **WHEN** `clearSubscription('botlingual', 'channel.chat.message')` is called
-- **THEN** `getSubscription('botlingual', 'channel.chat.message')` returns `null`
+- **WHEN** `clearSubscription('pvtchbot', 'channel.chat.message')` is called
+- **THEN** `getSubscription('pvtchbot', 'channel.chat.message')` returns `null`
 
 ### Requirement: EventSub message dedupe
 
@@ -98,18 +98,18 @@ The storage worker SHALL provide a SQLite-backed `TwitchChannel` Durable Object 
 
 #### Scenario: Within limit
 
-- **WHEN** `acquireSendSlot('botlingual', null)` is called 20 times in quick succession on a new `standard` channel
+- **WHEN** `acquireSendSlot('pvtchbot', null)` is called 20 times in quick succession on a new `standard` channel
 - **THEN** all 20 return `{ ok: true }`
 
 #### Scenario: Duplicate send
 
-- **WHEN** `acquireSendSlot('botlingual', 'send:lingual:m1')` is called twice within 15 minutes
+- **WHEN** `acquireSendSlot('pvtchbot', 'send:lingual:m1')` is called twice within 15 minutes
 - **THEN** the second returns `{ ok: false, duplicate: true }` and consumes no token
 
 #### Scenario: Claim kept while waiting for a slot
 
-- **WHEN** `acquireSendSlot('botlingual', 'send:lingual:m1')` returns `{ ok: false, retryAfterMs }` and the retry calls `acquireSendSlot('botlingual', null)` after the delay
-- **THEN** the retry returns `{ ok: true }`, and a later `acquireSendSlot('botlingual', 'send:lingual:m1')` returns `{ ok: false, duplicate: true }`
+- **WHEN** `acquireSendSlot('pvtchbot', 'send:lingual:m1')` returns `{ ok: false, retryAfterMs }` and the retry calls `acquireSendSlot('pvtchbot', null)` after the delay
+- **THEN** the retry returns `{ ok: true }`, and a later `acquireSendSlot('pvtchbot', 'send:lingual:m1')` returns `{ ok: false, duplicate: true }`
 
 #### Scenario: Limit exceeded
 
@@ -123,7 +123,7 @@ The storage worker SHALL provide a SQLite-backed `TwitchChannel` Durable Object 
 
 #### Scenario: Moderator tier
 
-- **WHEN** `setSendTier('botlingual', 'moderator')` is called on a channel with a full bucket
+- **WHEN** `setSendTier('pvtchbot', 'moderator')` is called on a channel with a full bucket
 - **THEN** after refill the bucket allows up to 100 sends per 30 seconds
 
 ### Requirement: RPC surface is serializable and minimal
@@ -151,7 +151,7 @@ Every public method on `TwitchChannel` SHALL return an `Rpc.Serializable` value 
 #### Scenario: Enable
 
 - **WHEN** `enableHandler('lingual')` is called on a disabled channel and the alarm runs
-- **THEN** one `sync` message for `botlingual` is enqueued
+- **THEN** one `sync` message for `pvtchbot` is enqueued
 
 #### Scenario: Repeat enable
 
@@ -161,7 +161,7 @@ Every public method on `TwitchChannel` SHALL return an `Rpc.Serializable` value 
 #### Scenario: Enable then disable before the alarm
 
 - **WHEN** `enableHandler('lingual')` then `disableHandler('lingual')` are called before the alarm runs
-- **THEN** exactly one `sync` message for `botlingual` is enqueued
+- **THEN** exactly one `sync` message for `pvtchbot` is enqueued
 
 #### Scenario: Queue send fails
 
@@ -174,13 +174,13 @@ While any enabled handler uses a sender, `TwitchChannel` SHALL run a cron job `r
 
 #### Scenario: Reconcile fires
 
-- **WHEN** botlingual's reconcile cron fires for a channel with `lingual` enabled
-- **THEN** one `sync` message for `botlingual` is enqueued
+- **WHEN** pvtchbot's reconcile cron fires for a channel with `lingual` enabled
+- **THEN** one `sync` message for `pvtchbot` is enqueued
 
 #### Scenario: Last handler disabled
 
-- **WHEN** `disableHandler('lingual')` leaves no enabled handler using `botlingual`
-- **THEN** botlingual's reconcile cron is cancelled
+- **WHEN** `disableHandler('lingual')` leaves no enabled handler using `pvtchbot`
+- **THEN** pvtchbot's reconcile cron is cancelled
 
 ### Requirement: Channel plugins
 
@@ -198,17 +198,36 @@ Handler- and feature-specific state SHALL live in `RpcTarget` plugin classes und
 
 ### Requirement: Lingual plugin settings
 
-The `Lingual` plugin SHALL store a target `language` (nullable) and `ignoredChatters` (a JSON array) in its own single-row table. `getSettings()` SHALL return `{ language: null, ignoredChatters: [] }` when nothing is saved. `setSettings()` SHALL replace both values, lowercasing the language (an empty one clears it) and lowercasing, stripping a leading `@` from, and de-duplicating chatter logins. Callers SHALL validate the language.
+The `Lingual` plugin SHALL store a target `language` (nullable) in its own single-row table. `getSettings()` SHALL return `{ language: null }` when nothing is saved. `setSettings()` SHALL replace the value, lowercasing the language (an empty one clears it). Callers SHALL validate the language.
 
 #### Scenario: Defaults
 
 - **WHEN** `lingual().getSettings()` is called on a channel that never saved settings
-- **THEN** it returns `{ language: null, ignoredChatters: [] }`
+- **THEN** it returns `{ language: null }`
 
 #### Scenario: Normalization
 
-- **WHEN** `lingual().setSettings({ language: ' Spanish ', ignoredChatters: ['@StreamElements', 'nightbot', 'NIGHTBOT'] })` is called
-- **THEN** the stored settings are `{ language: 'spanish', ignoredChatters: ['streamelements', 'nightbot'] }`
+- **WHEN** `lingual().setSettings({ language: ' Spanish ' })` is called
+- **THEN** the stored settings are `{ language: 'spanish' }`
+
+### Requirement: Channel message cache
+
+The `MessageCache` plugin (`messageCache()`) SHALL remember message keys in memory for `MESSAGE_CACHE_TTL_MS` milliseconds, falling back to 5 minutes when that value isn't a positive number. `firstSeen(key)` SHALL return true the first time a key is seen within the window and false for every repeat. A repeat SHALL NOT extend the window. Past 10,000 keys, the oldest SHALL be dropped. The cache SHALL NOT be persisted, so it starts empty after the object is evicted.
+
+#### Scenario: Repeat within the window
+
+- **WHEN** `messageCache().firstSeen('a')` is called twice within the window
+- **THEN** the first call returns true and the second returns false
+
+#### Scenario: Window ends
+
+- **WHEN** `firstSeen('a')` is called again after `MESSAGE_CACHE_TTL_MS` has passed since the first call
+- **THEN** it returns true
+
+#### Scenario: Invalid lifetime
+
+- **WHEN** `MESSAGE_CACHE_TTL_MS` is not a positive number
+- **THEN** the channel object still starts, logs an error, and keeps keys for 5 minutes
 
 ### Requirement: Channel feature flags
 
@@ -225,7 +244,7 @@ The `Flags` plugin (`flags()`) SHALL store named flags for the channel. `list()`
 
 #### Scenario: Enabled handler
 
-- **WHEN** `routeEvent({ messageId: 'm1', subscriptionType: 'channel.chat.message', senderId: 'botlingual' })` is called on a channel with `lingual` enabled
+- **WHEN** `routeEvent({ messageId: 'm1', subscriptionType: 'channel.chat.message', senderId: 'pvtchbot' })` is called on a channel with `lingual` enabled
 - **THEN** it returns `{ fresh: true, handlers: ['lingual'], flags: [...] }`
 
 #### Scenario: Disabled handler

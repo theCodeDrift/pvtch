@@ -26,14 +26,14 @@ export interface TwitchHandler {
 }
 
 export const TWITCH_SENDERS = {
-  botlingual: { userId: '1591556954', login: 'botlingual' },
+  pvtchbot: { userId: '1608076616', login: 'pvtchbot' },
 } as const satisfies Record<string, TwitchSender>;
 
 export type SenderId = keyof typeof TWITCH_SENDERS;
 
 export const TWITCH_HANDLERS = {
   lingual: {
-    sender: 'botlingual',
+    sender: 'pvtchbot',
     eventTypes: ['channel.chat.message'],
     queue: 'LINGUAL_EVENTS',
   },

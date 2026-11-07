@@ -29,7 +29,6 @@ describe('handleLingualEvent', () => {
     t = createTestEnv();
     t.channel(BROADCASTER_ID).settings = {
       language: 'english',
-      ignoredChatters: [],
     };
     t.ai.mockResolvedValue(
       aiResponse({
@@ -53,7 +52,7 @@ describe('handleLingualEvent', () => {
       kind: 'send',
       sendId: 'lingual:m-1',
       broadcasterId: BROADCASTER_ID,
-      senderId: 'botlingual',
+      senderId: 'pvtchbot',
       handlerId: 'lingual',
       message: 'hi friends, how is everyone tonight?',
       replyParentMessageId: 'msg-1',
@@ -160,12 +159,6 @@ describe('handleLingualEvent', () => {
         handlerEvent(chatEvent({ chatter_user_login: 'Nightbot' })),
         1
       );
-      expect(t.ai).not.toHaveBeenCalled();
-    });
-
-    it("a user on the channel's ignore list", async () => {
-      t.channel(BROADCASTER_ID).settings.ignoredChatters = ['viewer'];
-      await handleLingualEvent(t.env, handlerEvent(), 1);
       expect(t.ai).not.toHaveBeenCalled();
     });
 

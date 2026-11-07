@@ -8,12 +8,12 @@ pvtch-twitch routes each EventSub notification from the `twitch-events` queue: i
 
 ### Requirement: Handler and sender registry
 
-`@pvtch/shared/twitch-registry` SHALL export `TWITCH_SENDERS` (`SenderId → { userId, login }`), `TWITCH_HANDLERS` (`HandlerId → { sender, eventTypes, queue }`, where `queue` names the producer binding on `pvtch-twitch`), `CHANNEL_EVENT_TYPES` (`['user.authorization.revoke']`), `senderForUserId(userId)`, and `handlersFor(type)`. It SHALL register sender `botlingual` (the bot account's user id and login) and handler `lingual` (`sender: 'botlingual'`, `eventTypes: ['channel.chat.message']`, `queue: 'LINGUAL_EVENTS'`). No two senders SHALL share a `userId`, and every handler's `sender` SHALL be a registered sender.
+`@pvtch/shared/twitch-registry` SHALL export `TWITCH_SENDERS` (`SenderId → { userId, login }`), `TWITCH_HANDLERS` (`HandlerId → { sender, eventTypes, queue }`, where `queue` names the producer binding on `pvtch-twitch`), `CHANNEL_EVENT_TYPES` (`['user.authorization.revoke']`), `senderForUserId(userId)`, and `handlersFor(type)`. It SHALL register sender `pvtchbot` (the bot account's user id and login) and handler `lingual` (`sender: 'pvtchbot'`, `eventTypes: ['channel.chat.message']`, `queue: 'LINGUAL_EVENTS'`). No two senders SHALL share a `userId`, and every handler's `sender` SHALL be a registered sender.
 
 #### Scenario: Sender lookup
 
-- **WHEN** `senderForUserId` is called with botlingual's user id
-- **THEN** it returns `'botlingual'`
+- **WHEN** `senderForUserId` is called with pvtchbot's user id
+- **THEN** it returns `'pvtchbot'`
 
 #### Scenario: Handlers for a type
 
@@ -44,17 +44,17 @@ A failed handler-queue send SHALL throw, so the event is retried.
 
 #### Scenario: Handler disabled on the channel
 
-- **WHEN** a `channel.chat.message` for botlingual arrives for a channel where `lingual` is disabled
+- **WHEN** a `channel.chat.message` for pvtchbot arrives for a channel where `lingual` is disabled
 - **THEN** nothing is sent to `lingual-events` and the message is acked
 
 #### Scenario: Fan out
 
-- **WHEN** a `channel.chat.message` for botlingual arrives for a channel where `lingual` is enabled
+- **WHEN** a `channel.chat.message` for pvtchbot arrives for a channel where `lingual` is enabled
 - **THEN** exactly one handler message is sent to `lingual-events` and the router message is acked
 
 #### Scenario: Own message
 
-- **WHEN** a `channel.chat.message` whose chatter is botlingual is consumed
+- **WHEN** a `channel.chat.message` whose chatter is pvtchbot is consumed
 - **THEN** no handler message is sent
 
 #### Scenario: Fan-out send fails
@@ -87,4 +87,4 @@ Handlers SHALL send chat only by enqueuing `{ kind: 'send', sendId, broadcasterI
 #### Scenario: Reply requested
 
 - **WHEN** `pvtch-lingual` produces a translation
-- **THEN** it enqueues one `send` message for `botlingual` with `sendId` `lingual:<messageId>`, threaded to the source message, and makes no Helix call
+- **THEN** it enqueues one `send` message for `pvtchbot` with `sendId` `lingual:<messageId>`, threaded to the source message, and makes no Helix call

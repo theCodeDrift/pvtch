@@ -569,7 +569,7 @@ pnpm --filter @pvtch/lingual deploy`}
             <li>
               Create a Twitch account for the bot and note its user id and
               login. Put them in the{' '}
-              <code className="bg-muted px-1 rounded">botlingual</code> entry of{' '}
+              <code className="bg-muted px-1 rounded">pvtchbot</code> entry of{' '}
               <code className="bg-muted px-1 rounded">TWITCH_SENDERS</code> in{' '}
               <code className="bg-muted px-1 rounded">
                 packages/shared/src/twitch-registry.ts

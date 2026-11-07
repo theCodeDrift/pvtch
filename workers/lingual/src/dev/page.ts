@@ -12,7 +12,7 @@ export function harnessPage(): string {
   .note { color: #888; font-size: 13px; }
 </style>
 <h1>Lingual harness</h1>
-<p class="note">Dev only. Translates into English and posts a real message to Twitch chat as botlingual. <a href="/evals">v2 evals</a></p>
+<p class="note">Dev only. Translates into English and posts a real message to Twitch chat as pvtchbot. <a href="/evals">v2 evals</a></p>
 <form id="form">
   <label>User ID (the broadcaster's numeric Twitch ID)
     <input id="broadcasterId" inputmode="numeric" pattern="[0-9]+" required>
