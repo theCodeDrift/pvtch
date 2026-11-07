@@ -101,11 +101,12 @@ async function dispatch(
       const { challenge, subscription } = verificationBody.parse(json);
       const owner = subscriptionOwner(subscription);
       if (owner) {
-        await channelStub(env, owner.broadcasterId).setSubscription(
+        // Only the recorded (or a not yet recorded) subscription is
+        // promoted; a late challenge for a replaced one is ignored.
+        await channelStub(env, owner.broadcasterId).confirmSubscription(
           owner.senderId,
           subscription.type,
-          subscription.id,
-          'enabled'
+          subscription.id
         );
       }
       return new Response(challenge, {
@@ -123,9 +124,13 @@ async function dispatch(
       });
       const owner = subscriptionOwner(subscription);
       if (owner) {
-        await channelStub(env, owner.broadcasterId).clearSubscription(
+        // Clears the record only if it is this subscription, and requests
+        // a sync while a handler still wants the sender, so the
+        // subscription is recreated whatever the revocation reason.
+        await channelStub(env, owner.broadcasterId).subscriptionRevoked(
           owner.senderId,
-          subscription.type
+          subscription.type,
+          subscription.id
         );
         if (AUTHORIZATION_LOST.has(subscription.status)) {
           await disableSenderHandlers(env, owner.broadcasterId, owner.senderId);
