@@ -9,19 +9,20 @@ lingual-events (from pvtch-twitch's router)
   ─▶ claim lingual:<messageId> on TwitchChannel (first attempt only)
   ─▶ skip Shared Chat from other channels, commands, known bots, stale messages
   ─▶ skip repeats of a normalized message (channel.messageCache(), first attempt only)
-  ─▶ channel.lingual().getSettings() ─▶ lingo pipeline ─▶ Workers AI
+  ─▶ channel.lingual().getSettings() ─▶ v1 (Workers AI) or v2 (OpenRouter)
   ─▶ { kind: 'send', sendId: 'lingual:<messageId>', ... } on twitch-events
 ```
 
 - **Routing happens upstream.** `pvtch-twitch` only fans events out to `lingual-events` for channels with `lingual` enabled, and never forwards a pvtch bot's own messages.
 - **Sending happens upstream too.** Replies go back to `pvtch-twitch` as `send` requests; it applies the channel's rate limit for the sender (`pvtchbot`) and calls Helix.
-- **Translation flows:** `lingual.translate-v2` picks the flow per channel. Without it, a message takes **v1** below. **v2** (`pipeline-v2.ts`) asks a decision model whether all of the message is in the target language, and only translates when that probability is at or below a threshold. Past that point a translation is required, so a chat model translates without judging the language again. It doesn't receive native emotes or cheermotes, so they don't appear in the reply. Both go through OpenRouter, and any failure or uncertain answer stays quiet.
-- **Translation (v1):** `src/lingo/` is Lingual's own copy of Lingo detection. It reads EventSub message fragments, so native emotes and mentions are dropped exactly rather than guessed at. The language and ignore list are Lingual's own settings in the `TwitchChannel` `Lingual` plugin, separate from the Lingo helper's.
+- **Translation flows:** `lingual.translate-v2` picks the flow per channel. Without it, a message takes **v1** below. **v2** (`pipeline-v2.ts`) asks a decision model whether all of the message is in the target language, and only translates when that probability is at or below a threshold. Past that point a translation is required, so a chat model translates without judging the language again. It doesn't receive native emotes, cheermotes or URLs, so they don't appear in the reply. Both go through OpenRouter, and any failure or uncertain answer stays quiet.
+- **Translation (v1):** `src/lingo/` is Lingual's own copy of Lingo detection. It reads EventSub message fragments, so native emotes and mentions are dropped exactly rather than guessed at. The language is Lingual's own setting in the `TwitchChannel` `Lingual` plugin, separate from the Lingo helper's.
+- **Repeats:** a normalized message (no emotes, mentions or URLs, ignoring case and punctuation) is translated once per window, so raids and copypasta get one reply. `channel.messageCache()` holds only hashes, in memory; the lifetime is `MESSAGE_CACHE_TTL_MS` in `workers/storage/wrangler.jsonc`.
 - **Feature flags** arrive on each event as `flags` (`lingual.<feature>`); set them at `https://twitch.pvtch.com/admin/flags`. `lingual.no-thread` posts replies as plain messages.
 
 ## Configuration
 
-The v2 flow reads these vars, set in `wrangler.jsonc`. `wrangler.harness.jsonc` carries a copy for `/evals`, so change both. For a local override, set them in `workers/lingual/.dev.vars`.
+The v2 flow reads these vars, set in `wrangler.jsonc`. `wrangler.harness.jsonc` carries a copy for `/evals`, and a test keeps the two in step. For a local override, set them in `workers/lingual/.dev.vars`.
 
 | Var                                 | Default                        | Meaning                                                                                     |
 | ----------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
@@ -45,12 +46,15 @@ A local form that sends a fake chat message through the real Lingual path. Enter
 pnpm --filter @pvtch/lingual harness   # http://localhost:8790, or the machine's LAN IP or .local name
 ```
 
+The script runs a newer pinned wrangler through `pnpm dlx`, because Workers AI's remote session fails on the repo's 4.59.2.
+
 `src/dev/harness.ts` runs from `wrangler.harness.jsonc` alongside `pvtch-lingual`, `pvtch-twitch` and `pvtch-storage`. It puts a `handler-event` on `lingual-events`, so only the router is skipped. Nothing deploys that config. The harness listens on the LAN so other devices can reach it by mDNS name, and it only answers on localhost, private LAN addresses and `.local` hostnames. If a `.local` name fails from another machine, use the LAN IP: the name can resolve to addresses that machine can't reach. Anyone on that network can post as the bot while it runs.
 
 - **Flow:** pick v1 or v2 on the form. v2 needs `PVTCH_OPENROUTER_API_KEY` in this checkout's local secrets store.
 - **Evals:** `/evals` runs the fixtures in `src/dev/eval-fixtures.ts`, plus any messages you add, through the real v2 path and shows a table to review by hand. It calls OpenRouter but never posts to Twitch. Set a detector, translator and threshold there to try another pair, or a second pair to compare per message. These apply to that run only; production uses the `LINGUAL_V2_*` vars. Chat models must support structured outputs, and thinking is turned off where a model allows it.
 - **Language:** hardcoded to English. The harness writes it to the channel's local Lingual settings on each send.
 - **Threading:** the fake message has no real Twitch id to reply to, so it carries the `lingual.no-thread` flag.
+- **Repeats:** sending the same text twice within `MESSAGE_CACHE_TTL_MS` produces one post, so vary your test messages. `/evals` isn't affected.
 - **Results:** a post shows up in Twitch chat and failures in the terminal. A message the handler skips, such as a command or "lol", produces nothing.
 - **Needs:** `wrangler` logged into the pvtch account for Workers AI, the real `TWITCH_SECRET` in this checkout's local secrets store, and a broadcaster who has granted `channel:bot`.
 - **Don't enable Lingual locally:** with the real secret, pvtch-twitch's local subscription sync would change real EventSub subscriptions. The harness doesn't need it.

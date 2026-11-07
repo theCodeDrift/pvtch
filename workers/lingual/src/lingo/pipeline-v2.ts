@@ -7,7 +7,7 @@ import { v2ConfigFromEnv, type V2Config } from './config-v2';
 import { targetLanguageProbability } from './detector-v2';
 import { openRouterClient } from './openrouter';
 import { formatReply } from './pipeline';
-import { preprocess, textFromFragments } from './preprocess';
+import { URL_RE, preprocess, textFromFragments } from './preprocess';
 import { translateV2 } from './translator-v2';
 
 export type V2Outcome =
@@ -32,12 +32,14 @@ export interface V2Trace {
 }
 
 /** The message for the translator: Twitch tags native emotes and cheermotes
- * exactly, so they don't spend tokens there. Mentions stay in the reply. */
-function textWithoutEmotes(fragments: readonly ChatFragment[]): string {
+ * exactly, so they don't spend tokens there, and URLs have nothing to
+ * translate. Mentions stay in the reply. */
+function textForTranslator(fragments: readonly ChatFragment[]): string {
   return fragments
     .filter(({ type }) => type !== 'emote' && type !== 'cheermote')
     .map((fragment) => fragment.text)
     .join('')
+    .replaceAll(URL_RE, ' ')
     .replaceAll(/\s+/g, ' ')
     .trim();
 }
@@ -46,7 +48,7 @@ function textWithoutEmotes(fragments: readonly ChatFragment[]): string {
  * The OpenRouter flow. It only translates when the decision model is highly
  * confident the message isn't in the target language, so a failure or any
  * doubt stays quiet. Detection runs on the message's text without emotes and
- * mentions; the translator gets the message without emotes.
+ * mentions; the translator gets the message without emotes or URLs.
  */
 export async function traceChatMessageV2(
   env: Env,
@@ -92,7 +94,7 @@ export async function traceChatMessageV2(
 
   // Past detection a translation is required, so the translator doesn't
   // judge the language again.
-  const input = textWithoutEmotes(event.message.fragments);
+  const input = textForTranslator(event.message.fragments);
   let translation: string;
   try {
     translation = await translateV2(client, input, targetLanguage, {

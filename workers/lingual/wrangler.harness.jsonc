@@ -17,7 +17,8 @@
   "compatibility_date": "2025-04-01",
   "workers_dev": false,
 
-  // Keep in step with wrangler.jsonc: /evals starts from these defaults.
+  // Must match wrangler.jsonc, which test/harness-config.test.ts checks: /evals
+  // starts from these defaults.
   "vars": {
     "LINGUAL_V2_DETECTOR_API": "decisions",
     "LINGUAL_V2_DETECTOR_MODEL": "perplexity/pplx-decider-v1.2",
