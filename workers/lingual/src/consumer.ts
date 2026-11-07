@@ -7,8 +7,15 @@ export async function consume(batch: MessageBatch, env: Env): Promise<void> {
   for (const message of batch.messages) {
     try {
       const parsed = handlerEventMessage.safeParse(message.body);
-      if (!parsed.success || parsed.data.handlerId !== 'lingual') {
+      if (!parsed.success) {
         console.error('Unrecognized lingual-events message', parsed.error);
+        message.ack();
+        continue;
+      }
+      if (parsed.data.handlerId !== 'lingual') {
+        console.error('lingual-events message for another handler', {
+          handlerId: parsed.data.handlerId,
+        });
         message.ack();
         continue;
       }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   MAX_REPLY_LENGTH,
@@ -39,6 +39,8 @@ describe('formatReply', () => {
 });
 
 describe('translateChatMessage', () => {
+  const quiet = { kind: 'quiet' };
+  const failed = { kind: 'failed' };
   const spanish = chatEvent();
 
   it('sends the original text to the LLM and returns the translation', async () => {
@@ -51,9 +53,12 @@ describe('translateChatMessage', () => {
       })
     );
 
-    const reply = await translateChatMessage(t.env, spanish, 'english');
+    const result = await translateChatMessage(t.env, spanish, 'english');
 
-    expect(reply).toBe('hi friends, how is everyone tonight?');
+    expect(result).toEqual({
+      kind: 'reply',
+      reply: 'hi friends, how is everyone tonight?',
+    });
     const [, conversation] = t.ai.mock.calls[0] as [
       string,
       { messages: { content: string }[] },
@@ -75,8 +80,8 @@ describe('translateChatMessage', () => {
       },
     });
 
-    expect(await translateChatMessage(t.env, english, 'english')).toBe(
-      undefined
+    expect(await translateChatMessage(t.env, english, 'english')).toEqual(
+      quiet
     );
     expect(t.ai).not.toHaveBeenCalled();
   });
@@ -91,17 +96,43 @@ describe('translateChatMessage', () => {
       })
     );
 
-    expect(await translateChatMessage(t.env, spanish, 'english')).toBe(
-      undefined
+    expect(await translateChatMessage(t.env, spanish, 'english')).toEqual(
+      quiet
     );
   });
 
-  it('stays quiet when the LLM call fails', async () => {
+  it('stays quiet when only usernames are left', async () => {
+    const t = createTestEnv();
+    t.ai.mockResolvedValue(
+      aiResponse({
+        detected: 'Spanish',
+        detectedCode: 'spa',
+        translation: '@bob',
+      })
+    );
+
+    expect(await translateChatMessage(t.env, spanish, 'english')).toEqual(
+      quiet
+    );
+  });
+
+  it('fails when the LLM call throws', async () => {
     const t = createTestEnv();
     t.ai.mockRejectedValue(new Error('AI down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(await translateChatMessage(t.env, spanish, 'english')).toBe(
-      undefined
+    expect(await translateChatMessage(t.env, spanish, 'english')).toEqual(
+      failed
+    );
+  });
+
+  it('fails when the LLM returns unusable JSON', async () => {
+    const t = createTestEnv();
+    t.ai.mockResolvedValue({ choices: [{ message: { content: 'nope' } }] });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await translateChatMessage(t.env, spanish, 'english')).toEqual(
+      failed
     );
   });
 });

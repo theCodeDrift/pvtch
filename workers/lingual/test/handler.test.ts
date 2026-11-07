@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { consume } from '../src/consumer';
 import {
   NO_THREAD_FLAG,
+  RETRY_DELAY_SECONDS,
   TRANSLATE_V2_FLAG,
   handleLingualEvent,
 } from '../src/handler';
@@ -74,7 +75,10 @@ describe('handleLingualEvent', () => {
   });
 
   it('uses the OpenRouter flow with the translate-v2 flag', async () => {
-    vi.mocked(translateChatMessageV2).mockResolvedValue('hi from v2');
+    vi.mocked(translateChatMessageV2).mockResolvedValue({
+      kind: 'reply',
+      reply: 'hi from v2',
+    });
 
     await handleLingualEvent(
       t.env,
@@ -193,9 +197,85 @@ describe('handleLingualEvent', () => {
       aiResponse({ detected: 'Spanish', detectedCode: 'spa', translation: '' })
     );
 
-    await handleLingualEvent(t.env, handlerEvent(), 1);
+    const outcome = await handleLingualEvent(t.env, handlerEvent(), 1);
 
+    expect(outcome).toEqual({ type: 'ack' });
     expect(t.send).not.toHaveBeenCalled();
+  });
+
+  describe('when the model call fails', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      t.ai.mockRejectedValueOnce(new Error('AI down'));
+    });
+
+    it('retries after a short delay', async () => {
+      const outcome = await handleLingualEvent(t.env, handlerEvent(), 1);
+
+      expect(outcome).toEqual({
+        type: 'retry',
+        delaySeconds: RETRY_DELAY_SECONDS,
+      });
+      expect(t.send).not.toHaveBeenCalled();
+    });
+
+    it('posts the reply from its retry', async () => {
+      await handleLingualEvent(t.env, handlerEvent(), 1);
+      vi.setSystemTime(NOW + RETRY_DELAY_SECONDS * 1000);
+
+      const outcome = await handleLingualEvent(t.env, handlerEvent(), 2);
+
+      expect(outcome).toEqual({ type: 'ack' });
+      expect(t.send).toHaveBeenCalledOnce();
+    });
+
+    it('retries with the OpenRouter flow too', async () => {
+      vi.mocked(translateChatMessageV2).mockResolvedValue({ kind: 'failed' });
+
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
+        1
+      );
+
+      expect(outcome).toMatchObject({ type: 'retry' });
+    });
+
+    it('leaves a repeat during the retry to the retry', async () => {
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-1' }),
+        1
+      );
+      const repeat = await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-2' }),
+        1
+      );
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-1' }),
+        2
+      );
+
+      expect(repeat).toEqual({ type: 'ack' });
+      expect(t.ai).toHaveBeenCalledTimes(2);
+      expect(t.send).toHaveBeenCalledOnce();
+      expect(t.send).toHaveBeenCalledWith(
+        expect.objectContaining({ sendId: 'lingual:m-1' })
+      );
+    });
+
+    it('gives up when the retry would land too late', async () => {
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { timestamp: NOW - 56_000 }),
+        1
+      );
+
+      expect(outcome).toEqual({ type: 'ack' });
+    });
   });
 });
 
@@ -218,6 +298,34 @@ describe('lingual consumer', () => {
 
     expect(message.ack).toHaveBeenCalled();
     expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it('logs why an unrecognized message did not parse', async () => {
+    const t = createTestEnv();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { batch: b } = batch({ kind: 'nope' });
+
+    await consume(b, t.env);
+
+    expect(error).toHaveBeenCalledWith(
+      'Unrecognized lingual-events message',
+      expect.any(Error)
+    );
+  });
+
+  it('retries with the delay the handler asks for', async () => {
+    const t = createTestEnv();
+    t.channel(BROADCASTER_ID).settings.language = 'english';
+    t.ai.mockRejectedValue(new Error('AI down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { message, batch: b } = batch(handlerEvent());
+
+    await consume(b, t.env);
+
+    expect(message.retry).toHaveBeenCalledWith({
+      delaySeconds: RETRY_DELAY_SECONDS,
+    });
+    expect(message.ack).not.toHaveBeenCalled();
   });
 
   it('retries when handling throws', async () => {
