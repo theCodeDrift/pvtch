@@ -27,7 +27,7 @@ Enabling Lingual SHALL require `channel:bot` in the user's recorded scopes. The 
 
 ### Requirement: Bot settings UI
 
-The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots" whose first entry is "Lingual", linking to `/bots/lingual` inside the shared app layout. During rollout, the section and the page's controls SHALL be visible only to users whose Twitch login is in `LINGUAL_PREVIEW_USERS` (a comma-separated `pvtch` var, case-insensitive; empty shows them to no one). The page SHALL show `lingual`'s state (`getHandler('lingual')`) and its sender's stored subscription status (`getSubscription('botlingual', 'channel.chat.message')`) from `TwitchChannel` (Off, Connecting, Live, or the failed status), the sender's login (from `TWITCH_SENDERS`), and a Settings form for Lingual's own target language (supported languages only) and up to 25 ignored chatters, saved with `lingual().setSettings()`. It SHALL offer "Turn on Lingual" when disabled and "Turn off Lingual" when enabled. Turning off SHALL call `disableHandler('lingual')` (which schedules the sync) and SHALL NOT remove recorded scopes.
+The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots" whose first entry is "Lingual", linking to `/bots/lingual` inside the shared app layout. During rollout, the section and the page's controls SHALL be visible only to users whose Twitch login is in `LINGUAL_PREVIEW_USERS` (a comma-separated `pvtch` var, case-insensitive; empty shows them to no one). The page SHALL show `lingual`'s state (`getHandler('lingual')`) and its sender's stored subscription status (`getSubscription('pvtchbot', 'channel.chat.message')`) from `TwitchChannel` (Off, Connecting, Live, or the failed status), the sender's login (from `TWITCH_SENDERS`), and a Settings form for Lingual's own target language (supported languages only), saved with `lingual().setSettings()`. It SHALL offer "Turn on Lingual" when disabled and "Turn off Lingual" when enabled. Turning off SHALL call `disableHandler('lingual')` (which schedules the sync) and SHALL NOT remove recorded scopes.
 
 #### Scenario: Enabled with pending subscription
 
@@ -65,7 +65,7 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots
 
 #### Scenario: Bot account grants scopes
 
-- **WHEN** an admin or botlingual completes `/bot/authorize?sender=botlingual` logged into Twitch as botlingual
+- **WHEN** an admin or pvtchbot completes `/bot/authorize?sender=pvtchbot` logged into Twitch as pvtchbot
 - **THEN** the callback confirms the grant and shows success
 
 #### Scenario: Wrong Twitch account
@@ -75,12 +75,12 @@ The pvtch dashboard sidebar (`app-layout.tsx`) SHALL gain a section titled "Bots
 
 #### Scenario: Not an allowed user
 
-- **WHEN** a user who is neither the sender's account nor in `ADMIN_USERS` requests `/bot/authorize?sender=botlingual`
+- **WHEN** a user who is neither the sender's account nor in `ADMIN_USERS` requests `/bot/authorize?sender=pvtchbot`
 - **THEN** the response is HTTP 403
 
 #### Scenario: Bot account logged into www
 
-- **WHEN** botlingual, logged into www and not in `ADMIN_USERS`, requests `/bot/authorize?sender=botlingual`
+- **WHEN** pvtchbot, logged into www and not in `ADMIN_USERS`, requests `/bot/authorize?sender=pvtchbot`
 - **THEN** it is redirected to Twitch; `/admin/bootstrap` still returns HTTP 403 for it
 
 #### Scenario: Unknown sender

@@ -1,17 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEFAULT_MESSAGE_CACHE_TTL_MS,
   MESSAGE_CACHE_MAX_KEYS,
-  MESSAGE_CACHE_TTL_MS,
   MessageCache,
 } from '../src/durable-objects/twitch-channel/plugins/message-cache';
+
+const TTL_MS = 60_000;
 
 describe('MessageCache', () => {
   let cache: MessageCache;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    cache = new MessageCache();
+    cache = new MessageCache(String(TTL_MS));
   });
 
   afterEach(() => {
@@ -27,7 +29,7 @@ describe('MessageCache', () => {
   it('forgets a key once the window ends', () => {
     cache.firstSeen('a');
 
-    vi.advanceTimersByTime(MESSAGE_CACHE_TTL_MS);
+    vi.advanceTimersByTime(TTL_MS);
 
     expect(cache.firstSeen('a')).toBe(true);
   });
@@ -35,12 +37,29 @@ describe('MessageCache', () => {
   it('does not extend the window on a repeat', () => {
     cache.firstSeen('a');
 
-    vi.advanceTimersByTime(MESSAGE_CACHE_TTL_MS - 1);
+    vi.advanceTimersByTime(TTL_MS - 1);
     expect(cache.firstSeen('a')).toBe(false);
 
     vi.advanceTimersByTime(1);
     expect(cache.firstSeen('a')).toBe(true);
   });
+
+  it.each(['', 'soon', '0', '-1'])(
+    'falls back on a bad lifetime: %j',
+    (ttl) => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const fallback = new MessageCache(ttl);
+      fallback.firstSeen('a');
+
+      vi.advanceTimersByTime(DEFAULT_MESSAGE_CACHE_TTL_MS - 1);
+      expect(fallback.firstSeen('a')).toBe(false);
+
+      vi.advanceTimersByTime(1);
+      expect(fallback.firstSeen('a')).toBe(true);
+      expect(error).toHaveBeenCalledOnce();
+      error.mockRestore();
+    }
+  );
 
   it('drops the oldest key past the size limit', () => {
     for (let index = 0; index < MESSAGE_CACHE_MAX_KEYS; index++) {

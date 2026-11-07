@@ -1,4 +1,4 @@
-import { knownBots } from '@pvtch/shared/known-bots';
+import { isKnownBot } from '@pvtch/shared/known-bots';
 import { ack, type Outcome } from '@pvtch/shared/queue-outcome';
 import {
   CHAT_MESSAGE_TYPE,
@@ -12,8 +12,6 @@ import type {
 import { messageKey } from './lingo/message-key';
 import { translateChatMessage } from './lingo/pipeline';
 import { translateChatMessageV2 } from './lingo/pipeline-v2';
-
-const KNOWN_BOTS = new Set(knownBots.map((name) => name.toLowerCase()));
 
 /** A translation this late is noise; chat has moved on. pvtch-twitch checks
  * again before sending. */
@@ -72,15 +70,17 @@ export async function handleLingualEvent(
   }
 
   const text = event.message.text.trim();
-  const chatter = event.chatter_user_login.toLowerCase();
-  if (text.length === 0 || text.startsWith('!') || KNOWN_BOTS.has(chatter)) {
+  if (
+    text.length === 0 ||
+    text.startsWith('!') ||
+    isKnownBot(event.chatter_user_login)
+  ) {
     return ack;
   }
 
   using lingual = await channel.lingual();
   const settings = await lingual.getSettings();
   if (!settings.language) return ack;
-  if (settings.ignoredChatters.includes(chatter)) return ack;
 
   if (now - message.timestamp > MAX_REPLY_AGE_MS) return ack;
 

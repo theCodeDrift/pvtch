@@ -6,4 +6,5 @@
  */
 export interface StorageEnv {
   TWITCH_EVENTS: Queue;
+  MESSAGE_CACHE_TTL_MS: string;
 }

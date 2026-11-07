@@ -60,7 +60,7 @@ describe('router', () => {
       kind: 'handler-event',
       handlerId: 'lingual',
       broadcasterId: BROADCASTER_ID,
-      senderId: 'botlingual',
+      senderId: 'pvtchbot',
       messageId: 'm-1',
       subscriptionType: 'channel.chat.message',
       timestamp: NOW,
@@ -149,19 +149,19 @@ describe('router', () => {
         ),
         1
       );
-      expect(t.channel(BROADCASTER_ID).getSendTier('botlingual')).toBe(
+      expect(t.channel(BROADCASTER_ID).getSendTier('pvtchbot')).toBe(
         'moderator'
       );
     });
 
     it('drops back to standard without one', async () => {
-      t.channel(BROADCASTER_ID).setSendTier('botlingual', 'moderator');
+      t.channel(BROADCASTER_ID).setSendTier('pvtchbot', 'moderator');
       await handleQueueMessage(
         t.env,
         chatMessage(chatEvent({ chatter_user_id: BOT_ID, badges: [] })),
         1
       );
-      expect(t.channel(BROADCASTER_ID).getSendTier('botlingual')).toBe(
+      expect(t.channel(BROADCASTER_ID).getSendTier('pvtchbot')).toBe(
         'standard'
       );
     });
@@ -211,7 +211,7 @@ function sendMessage(
     kind: 'send',
     sendId: 'lingual:m-1',
     broadcasterId: BROADCASTER_ID,
-    senderId: 'botlingual',
+    senderId: 'pvtchbot',
     handlerId: 'lingual',
     message: 'hi friends',
     replyParentMessageId: 'msg-1',
@@ -387,7 +387,7 @@ describe('consume', () => {
     const t = createTestEnv();
     t.channel(BROADCASTER_ID).enableHandler('lingual');
     t.channel(BROADCASTER_ID).setSubscription(
-      'botlingual',
+      'pvtchbot',
       'channel.chat.message',
       's-1',
       'enabled'
@@ -402,7 +402,7 @@ describe('consume', () => {
     const limited = make({
       kind: 'sync',
       broadcasterId: BROADCASTER_ID,
-      senderId: 'botlingual',
+      senderId: 'pvtchbot',
     });
     const broken = make(chatMessage());
     t.lingualSend.mockRejectedValueOnce(new Error('queue down'));

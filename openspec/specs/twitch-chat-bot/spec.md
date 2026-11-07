@@ -26,12 +26,12 @@ When `pvtch-twitch` consumes `{ kind: 'sync', broadcasterId, senderId }`, it SHA
 
 #### Scenario: Handler enabled
 
-- **WHEN** a sync for `botlingual` runs on a channel where `lingual` was just enabled
-- **THEN** a `channel.chat.message` subscription for botlingual is created and recorded with status `webhook_callback_verification_pending`
+- **WHEN** a sync for `pvtchbot` runs on a channel where `lingual` was just enabled
+- **THEN** a `channel.chat.message` subscription for pvtchbot is created and recorded with status `webhook_callback_verification_pending`
 
 #### Scenario: Handler disabled
 
-- **WHEN** a sync for `botlingual` runs on a channel where no handler using botlingual is enabled
+- **WHEN** a sync for `pvtchbot` runs on a channel where no handler using pvtchbot is enabled
 - **THEN** the stored subscriptions are deleted via Helix and their records cleared
 
 #### Scenario: Recover revoked subscription
@@ -56,15 +56,15 @@ The twitch worker SHALL maintain one `user.authorization.revoke` webhook subscri
 #### Scenario: Streamer disconnects pvtch
 
 - **WHEN** a `user.authorization.revoke` event arrives for user `123` with `lingual` enabled
-- **THEN** `TwitchChannel(twitch:123)` has `lingual` disabled and a sync for `botlingual` is enqueued
+- **THEN** `TwitchChannel(twitch:123)` has `lingual` disabled and a sync for `pvtchbot` is enqueued
 
 ### Requirement: Event filtering and loop prevention
 
-The router SHALL NOT fan out a `channel.chat.message` whose `chatter_user_id` is any registered sender's `userId`, so no handler ever sees a pvtch bot's own message. Content filters (known bots, ignored chatters, commands, Shared Chat) SHALL be applied by the handler worker that owns the feature.
+The router SHALL NOT fan out a `channel.chat.message` whose `chatter_user_id` is any registered sender's `userId`, so no handler ever sees a pvtch bot's own message. Content filters (known bots, commands, Shared Chat) SHALL be applied by the handler worker that owns the feature.
 
 #### Scenario: Bot's own message
 
-- **WHEN** an event's `chatter_user_id` is botlingual
+- **WHEN** an event's `chatter_user_id` is pvtchbot
 - **THEN** no handler message is sent
 
 #### Scenario: Another pvtch bot's message
@@ -78,13 +78,13 @@ When the router consumes a `channel.chat.message` whose `chatter_user_id` equals
 
 #### Scenario: Bot is modded
 
-- **WHEN** botlingual's own reply arrives as an event with a `moderator` badge
-- **THEN** botlingual's send tier on that channel becomes `moderator`
+- **WHEN** pvtchbot's own reply arrives as an event with a `moderator` badge
+- **THEN** pvtchbot's send tier on that channel becomes `moderator`
 
 #### Scenario: Bot is unmodded
 
-- **WHEN** botlingual's own reply arrives with no moderator badge on a channel whose botlingual tier is `moderator`
-- **THEN** botlingual's send tier becomes `standard`
+- **WHEN** pvtchbot's own reply arrives with no moderator badge on a channel whose pvtchbot tier is `moderator`
+- **THEN** pvtchbot's send tier becomes `standard`
 
 ### Requirement: Rate-limited reply sending
 
@@ -93,7 +93,7 @@ When `pvtch-twitch` consumes `{ kind: 'send', sendId, broadcasterId, senderId, h
 #### Scenario: Successful reply
 
 - **WHEN** a `send` request is consumed and a slot is available
-- **THEN** a threaded reply is posted as botlingual and the queue message acked
+- **THEN** a threaded reply is posted as pvtchbot and the queue message acked
 
 #### Scenario: Local bucket empty
 

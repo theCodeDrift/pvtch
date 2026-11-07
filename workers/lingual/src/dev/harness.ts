@@ -8,7 +8,7 @@
  *               lingual-events, sent through translation flow v1 or v2
  *
  * From the queue on it's production code: pvtch-lingual translates and
- * pvtch-twitch posts as botlingual. The result shows up in Twitch chat and in
+ * pvtch-twitch posts as pvtchbot. The result shows up in Twitch chat and in
  * the terminal, not here.
  */
 import type { OpenRouter } from '@openrouter/sdk';
@@ -104,17 +104,14 @@ async function send(request: Request, env: HarnessEnv): Promise<Response> {
     env.TWITCH_CHANNEL.idFromName(`twitch:${broadcasterId}`)
   );
   using lingual = await channel.lingual();
-  await lingual.setSettings({
-    language: TARGET_LANGUAGE,
-    ignoredChatters: [],
-  });
+  await lingual.setSettings({ language: TARGET_LANGUAGE });
 
   const messageId = crypto.randomUUID();
   const routed: HandlerEventMessage = {
     kind: 'handler-event',
     handlerId: 'lingual',
     broadcasterId,
-    senderId: 'botlingual',
+    senderId: 'pvtchbot',
     messageId,
     subscriptionType: CHAT_MESSAGE_TYPE,
     timestamp: Date.now(),

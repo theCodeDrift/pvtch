@@ -24,7 +24,6 @@ import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/twitch-data';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { LanguageCombobox } from '@/components/language-combobox';
 import {
@@ -63,8 +62,6 @@ async function hasLingualScope(env: Env, userId: string): Promise<boolean> {
   );
   return record?.scopes?.includes(LINGUAL_SCOPE) ?? false;
 }
-
-const MAX_IGNORED_CHATTERS = 25;
 
 function formField(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -115,7 +112,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     enabled: handler.enabled,
     subscriptionStatus: subscription?.status ?? undefined,
     language: settings.language ?? '',
-    ignoredChatters: settings.ignoredChatters,
     botLogin: TWITCH_SENDERS[LINGUAL_SENDER].login,
     justEnabled: url.searchParams.get('enabled') === '1',
     grantError: grantError
@@ -154,16 +150,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 400 }
       );
     }
-    const ignoredChatters = formField(formData, 'ignored')
-      .split(',')
-      .map((login) => login.trim())
-      .filter((login) => login.length > 0 && login.length < 64)
-      .slice(0, MAX_IGNORED_CHATTERS);
     using lingual = await channel.lingual();
-    await lingual.setSettings({
-      language: resolved.name,
-      ignoredChatters,
-    });
+    await lingual.setSettings({ language: resolved.name });
     return data({ ok: 'saved' as const });
   }
   return data({ error: 'Unknown action' }, { status: 400 });
@@ -204,26 +192,20 @@ function StatusBadge({
   );
 }
 
-function LingualSettingsForm({
-  language,
-  ignoredChatters,
-}: {
-  language: string;
-  ignoredChatters: string[];
-}) {
+function LingualSettingsForm({ language }: { language: string }) {
   const fetcher = useFetcher<typeof action>();
   const saving = fetcher.state !== 'idle';
 
   const form = useForm({
-    defaultValues: { language, ignored: ignoredChatters.join(', ') },
+    defaultValues: { language },
     onSubmit: ({ value }) => {
       void fetcher.submit({ intent: 'settings', ...value }, { method: 'POST' });
     },
   });
 
   useEffect(() => {
-    form.reset({ language, ignored: ignoredChatters.join(', ') });
-  }, [language, ignoredChatters]);
+    form.reset({ language });
+  }, [language]);
 
   useEffect(() => {
     if (fetcher.state !== 'idle' || !fetcher.data) return;
@@ -267,27 +249,6 @@ function LingualSettingsForm({
                 into it.
               </FieldDescription>
             )}
-          </Field>
-        )}
-      />
-      <form.Field
-        name="ignored"
-        children={(field) => (
-          <Field>
-            <FieldLabel htmlFor="lingual-ignored">Ignored chatters</FieldLabel>
-            <Input
-              id="lingual-ignored"
-              autoComplete="off"
-              placeholder="yourbot, anotherbot"
-              value={field.state.value}
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-            />
-            <FieldDescription>
-              Lingual never translates messages from these accounts. Separate
-              names with commas (max {MAX_IGNORED_CHATTERS}). Common chat bots
-              are already ignored.
-            </FieldDescription>
           </Field>
         )}
       />
@@ -423,10 +384,7 @@ export default function BotsLingual() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LingualSettingsForm
-                language={loaderData.language}
-                ignoredChatters={loaderData.ignoredChatters}
-              />
+              <LingualSettingsForm language={loaderData.language} />
             </CardContent>
           </Card>
         )}

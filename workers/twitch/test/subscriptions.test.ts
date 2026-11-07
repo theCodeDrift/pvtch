@@ -30,7 +30,7 @@ const route =
       ? respond(url)
       : undefined;
 
-const CHAT = { senderId: 'botlingual', type: TYPE } as const;
+const CHAT = { senderId: 'pvtchbot', type: TYPE } as const;
 
 describe('subscription sync', () => {
   let t: TestEnv;
@@ -60,7 +60,7 @@ describe('subscription sync', () => {
         )
       );
 
-      expect(await sync(t.env, BROADCASTER_ID, 'botlingual')).toEqual({
+      expect(await sync(t.env, BROADCASTER_ID, 'pvtchbot')).toEqual({
         type: 'ack',
       });
 
@@ -97,7 +97,7 @@ describe('subscription sync', () => {
         )
       );
 
-      await sync(t.env, BROADCASTER_ID, 'botlingual');
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
 
       expect(record()?.subscriptionId).toBe('s-existing');
     });
@@ -113,7 +113,7 @@ describe('subscription sync', () => {
         )
       );
 
-      expect(await sync(t.env, BROADCASTER_ID, 'botlingual')).toEqual({
+      expect(await sync(t.env, BROADCASTER_ID, 'pvtchbot')).toEqual({
         type: 'ack',
       });
       expect(t.channel(BROADCASTER_ID).listHandlers()).toEqual([]);
@@ -133,7 +133,7 @@ describe('subscription sync', () => {
         )
       );
 
-      await sync(t.env, BROADCASTER_ID, 'botlingual');
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
 
       const writes = fetchMock.mock.calls.filter(
         ([url, init]) =>
@@ -166,7 +166,7 @@ describe('subscription sync', () => {
         )
       );
 
-      await sync(t.env, BROADCASTER_ID, 'botlingual');
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
 
       expect(record()?.subscriptionId).toBe('s-new');
     });
@@ -193,7 +193,7 @@ describe('subscription sync', () => {
         )
       );
 
-      const outcome = await sync(t.env, BROADCASTER_ID, 'botlingual');
+      const outcome = await sync(t.env, BROADCASTER_ID, 'pvtchbot');
 
       expect(outcome.type).toBe('retry');
     });
@@ -234,7 +234,7 @@ describe('subscription sync', () => {
         })
       );
 
-      expect(await sync(t.env, BROADCASTER_ID, 'botlingual')).toEqual({
+      expect(await sync(t.env, BROADCASTER_ID, 'pvtchbot')).toEqual({
         type: 'ack',
       });
       expect(deleted).toEqual(['s-1', 's-2']);
@@ -245,7 +245,7 @@ describe('subscription sync', () => {
       t.channel(BROADCASTER_ID).disableHandler('lingual');
       const fetchMock = mockFetch();
 
-      await sync(t.env, BROADCASTER_ID, 'botlingual');
+      await sync(t.env, BROADCASTER_ID, 'pvtchbot');
 
       expect(fetchMock).not.toHaveBeenCalled();
     });

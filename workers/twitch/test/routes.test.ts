@@ -31,7 +31,7 @@ function login(t: TestEnv, login: string) {
 }
 
 function loginAsBot(t: TestEnv) {
-  return signIn(t, BOT_ID, 'botlingual');
+  return signIn(t, BOT_ID, 'pvtchbot');
 }
 
 const ORIGIN = 'https://twitch.example.com';
@@ -63,7 +63,7 @@ describe('admin routes', () => {
 
   it('refuses /bot/authorize without a session', async () => {
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual'),
+      get('/bot/authorize?sender=pvtchbot'),
       t.env
     );
     expect(response.status).toBe(403);
@@ -72,7 +72,7 @@ describe('admin routes', () => {
   it('does not accept an overlay token as a session', async () => {
     await login(t, 'admin_user');
     const cookie = 'pvtch_token=tok-admin_user';
-    for (const path of ['/bot/authorize?sender=botlingual', '/admin/flags']) {
+    for (const path of ['/bot/authorize?sender=pvtchbot', '/admin/flags']) {
       const response = await fetchWorker(get(path, cookie), t.env);
       expect(response.status).toBe(403);
     }
@@ -81,7 +81,7 @@ describe('admin routes', () => {
   it('refuses /bot/authorize for a logged-in non-admin', async () => {
     const cookie = await login(t, 'viewer');
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual', cookie),
+      get('/bot/authorize?sender=pvtchbot', cookie),
       t.env
     );
     expect(response.status).toBe(403);
@@ -91,7 +91,7 @@ describe('admin routes', () => {
     const cookie = await login(t, 'admin_user');
     const env = { ...t.env, ADMIN_USERS: '' } as unknown as Env;
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual', cookie),
+      get('/bot/authorize?sender=pvtchbot', cookie),
       env
     );
     expect(response.status).toBe(403);
@@ -100,7 +100,7 @@ describe('admin routes', () => {
   it('sends an admin to Twitch for the bot scopes', async () => {
     const cookie = await login(t, 'admin_user');
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual', cookie),
+      get('/bot/authorize?sender=pvtchbot', cookie),
       t.env
     );
 
@@ -117,7 +117,7 @@ describe('admin routes', () => {
   it('sends the bot account itself to Twitch without being an admin', async () => {
     const cookie = await loginAsBot(t);
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual', cookie),
+      get('/bot/authorize?sender=pvtchbot', cookie),
       t.env
     );
     expect(response.status).toBe(302);
@@ -135,21 +135,21 @@ describe('admin routes', () => {
   it('carries the sender through the OAuth state', async () => {
     const cookie = await login(t, 'admin_user');
     const response = await fetchWorker(
-      get('/bot/authorize?sender=botlingual', cookie),
+      get('/bot/authorize?sender=pvtchbot', cookie),
       t.env
     );
     const state = new URL(
       response.headers.get('Location') ?? ''
     ).searchParams.get('state');
-    expect(state).toMatch(/\.botlingual$/);
+    expect(state).toMatch(/\.pvtchbot$/);
   });
 
   it("escapes Twitch's ?error= on the callback page", async () => {
     const cookie = await login(t, 'admin_user');
     const response = await fetchWorker(
       get(
-        '/bot/callback?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E&state=s.botlingual',
-        `${cookie}; pvtch_bot_state=s.botlingual`
+        '/bot/callback?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E&state=s.pvtchbot',
+        `${cookie}; pvtch_bot_state=s.pvtchbot`
       ),
       t.env
     );
@@ -182,8 +182,8 @@ describe('admin routes', () => {
 
     const response = await fetchWorker(
       get(
-        '/bot/callback?code=c&state=s.botlingual',
-        `${cookie}; pvtch_bot_state=s.botlingual`
+        '/bot/callback?code=c&state=s.pvtchbot',
+        `${cookie}; pvtch_bot_state=s.pvtchbot`
       ),
       t.env
     );
@@ -206,8 +206,8 @@ describe('admin routes', () => {
 
     const response = await fetchWorker(
       get(
-        '/bot/callback?code=c&state=s.botlingual',
-        `${cookie}; pvtch_bot_state=s.botlingual`
+        '/bot/callback?code=c&state=s.pvtchbot',
+        `${cookie}; pvtch_bot_state=s.pvtchbot`
       ),
       t.env
     );

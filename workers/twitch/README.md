@@ -19,7 +19,7 @@ twitch-events consumer
   └▶ send (from handlers): claim send:<sendId> + take a token, then POST /helix/chat/messages
 ```
 
-- **Handlers and senders.** A handler is a feature (`lingual`) with its event types and queue; a sender is the Twitch bot account it posts as (`botlingual`). Both are registered in `@pvtch/shared/twitch-registry`. Subscriptions and send rate limits are per (channel, sender); enablement is per (channel, handler).
+- **Handlers and senders.** A handler is a feature (`lingual`) with its event types and queue; a sender is the Twitch bot account it posts as (`pvtchbot`). Both are registered in `@pvtch/shared/twitch-registry`. Subscriptions and send rate limits are per (channel, sender); enablement is per (channel, handler).
 - **Only this worker calls Twitch.** `TwitchChannel` (in `pvtch-storage`), `pvtch` and handler workers request Twitch work through the `twitch-events` queue.
 - **Duplicates.** Queues deliver at least once, so every hop claims a key on the channel's `TwitchChannel`: the router the EventSub message id, handlers `<handlerId>:<messageId>`, sends `send:<sendId>`. Each hop claims on its first attempt only, so its own retries pass.
 - **No user tokens are stored.** Senders post with an app access token (client credentials, cached in `PVTCH_KV`). Twitch records the broadcaster's `channel:bot` grant and the bot account's own scopes.
@@ -47,7 +47,7 @@ For local development, follow `.dev.vars.example` to put both secrets in Wrangle
 2. Create the queues: `twitch-events`, `twitch-events-dlq`, and each handler's queue (`lingual-events`, `lingual-events-dlq`).
 3. Put the Twitch app's client secret in the account's Secrets Store as `TWITCH_SECRET` (both workers bind it), and add `TWITCH_EVENTSUB_SECRET` (10–100 random characters) to the same store.
 4. Deploy (see below). The custom domain `twitch.pvtch.com` comes from `routes` in `wrangler.jsonc`.
-5. Log into Twitch **as the bot account**, log into www with it, and open `https://twitch.pvtch.com/bot/authorize?sender=botlingual`. This grants the bot `user:bot user:read:chat user:write:chat`.
+5. Log into Twitch **as the bot account**, log into www with it, and open `https://twitch.pvtch.com/bot/authorize?sender=pvtchbot`. This grants the bot `user:bot user:read:chat user:write:chat`.
 6. Open `https://twitch.pvtch.com/admin/bootstrap` and press the button. This creates the app-wide `user.authorization.revoke` subscription.
 7. A user in `LINGUAL_PREVIEW_USERS` (a `pvtch` var) opens Bots → Lingual on www and turns it on.
 

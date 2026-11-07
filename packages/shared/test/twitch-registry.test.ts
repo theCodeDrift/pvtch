@@ -30,7 +30,7 @@ describe('twitch registry', () => {
   });
 
   it('finds a sender by user id', () => {
-    expect(senderForUserId('1591556954')).toBe('botlingual');
+    expect(senderForUserId('1608076616')).toBe('pvtchbot');
   });
 
   it('returns undefined for an unknown user id', () => {
@@ -43,7 +43,7 @@ describe('twitch registry', () => {
   });
 
   it('finds handlers for a sender', () => {
-    expect(handlersUsing('botlingual')).toEqual(['lingual']);
+    expect(handlersUsing('pvtchbot')).toEqual(['lingual']);
   });
 
   it('tracks handler and channel-level types only', () => {

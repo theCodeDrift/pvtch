@@ -1,7 +1,8 @@
 import { RpcTarget } from 'cloudflare:workers';
 
-/** How long a message key is remembered. */
-export const MESSAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+/** Used when `MESSAGE_CACHE_TTL_MS` isn't a positive number. A bad value
+ * must not stop the channel object from starting. */
+export const DEFAULT_MESSAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** The oldest keys go first past this, so a flood can't grow memory. */
 export const MESSAGE_CACHE_MAX_KEYS = 10_000;
@@ -16,6 +17,18 @@ export const MESSAGE_CACHE_MAX_KEYS = 10_000;
  */
 export class MessageCache extends RpcTarget {
   private expiries = new Map<string, number>();
+  private ttlMs: number;
+
+  constructor(ttlMs: string) {
+    super();
+    const parsed = Number(ttlMs);
+    if (parsed > 0) {
+      this.ttlMs = parsed;
+    } else {
+      console.error('MESSAGE_CACHE_TTL_MS is invalid', { ttlMs });
+      this.ttlMs = DEFAULT_MESSAGE_CACHE_TTL_MS;
+    }
+  }
 
   /** True the first time a key is seen within the window, false for every
    * repeat. A repeat doesn't extend the window. */
@@ -24,7 +37,7 @@ export class MessageCache extends RpcTarget {
     this.prune(now);
     if (this.expiries.has(key)) return false;
 
-    this.expiries.set(key, now + MESSAGE_CACHE_TTL_MS);
+    this.expiries.set(key, now + this.ttlMs);
     return true;
   }
 

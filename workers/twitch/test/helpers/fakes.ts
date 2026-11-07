@@ -36,9 +36,8 @@ export class FakeChannel {
   slot: Slot = { ok: true };
   claimed = new Set<string>();
   flagSet = new Set<string>();
-  lingualSettings: { language: string | null; ignoredChatters: string[] } = {
+  lingualSettings: { language: string | null } = {
     language: null,
-    ignoredChatters: [],
   };
   subscriptions = new Map<string, Record_>();
 
@@ -148,7 +147,7 @@ export class FakeKV {
   }
 }
 
-export const BOT_ID = TWITCH_SENDERS.botlingual.userId;
+export const BOT_ID = TWITCH_SENDERS.pvtchbot.userId;
 export const BROADCASTER_ID = 'b-123';
 export const EVENTSUB_SECRET = 'test-eventsub-secret';
 

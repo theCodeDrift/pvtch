@@ -12,7 +12,7 @@ const CHAT = 'channel.chat.message';
 function drain(channel: TwitchChannel, count: number) {
   return Array.from({ length: count }, () =>
     // eslint-disable-next-line unicorn/no-null -- no claim
-    channel.acquireSendSlot('botlingual', null)
+    channel.acquireSendSlot('pvtchbot', null)
   );
 }
 
@@ -20,7 +20,7 @@ function routeChat(channel: TwitchChannel, messageId: string | null) {
   return channel.routeEvent({
     messageId,
     subscriptionType: CHAT,
-    senderId: 'botlingual',
+    senderId: 'pvtchbot',
   });
 }
 
@@ -35,7 +35,10 @@ describe('TwitchChannel', () => {
       id: { name: 'twitch:123' },
       storage: { sql, setAlarm },
     } as unknown as DurableObjectState;
-    const env = { TWITCH_EVENTS: { send } } as unknown as Env;
+    const env = {
+      TWITCH_EVENTS: { send },
+      MESSAGE_CACHE_TTL_MS: '300000',
+    } as unknown as Env;
     return new TwitchChannel(ctx, env);
   }
 
@@ -145,7 +148,7 @@ describe('TwitchChannel', () => {
   });
 
   describe('subscription sync requests', () => {
-    const reconcileTask = 'reconcile-subscriptions:botlingual';
+    const reconcileTask = 'reconcile-subscriptions:pvtchbot';
 
     it('enable requests one sync and starts the reconcile cron', async () => {
       channel.enableHandler('lingual');
@@ -159,7 +162,7 @@ describe('TwitchChannel', () => {
       expect(send).toHaveBeenCalledWith({
         kind: 'sync',
         broadcasterId: '123',
-        senderId: 'botlingual',
+        senderId: 'pvtchbot',
       });
     });
 
@@ -185,7 +188,7 @@ describe('TwitchChannel', () => {
 
       expect(send).toHaveBeenCalledOnce();
       expect(send).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'sync', senderId: 'botlingual' })
+        expect.objectContaining({ kind: 'sync', senderId: 'pvtchbot' })
       );
       expect(pendingJobs(reconcileTask)).toHaveLength(0);
     });
@@ -212,13 +215,13 @@ describe('TwitchChannel', () => {
       channel.enableHandler('lingual');
 
       await channel.alarm();
-      expect(pendingJobs('sync-subscriptions:botlingual')).toHaveLength(1);
+      expect(pendingJobs('sync-subscriptions:pvtchbot')).toHaveLength(1);
 
       vi.advanceTimersByTime(31_000);
       await channel.alarm();
 
       expect(send).toHaveBeenCalledTimes(2);
-      expect(pendingJobs('sync-subscriptions:botlingual')).toHaveLength(0);
+      expect(pendingJobs('sync-subscriptions:pvtchbot')).toHaveLength(0);
     });
 
     it('the reconcile cron requests a sync', async () => {
@@ -232,7 +235,7 @@ describe('TwitchChannel', () => {
       expect(send).toHaveBeenCalledWith({
         kind: 'sync',
         broadcasterId: '123',
-        senderId: 'botlingual',
+        senderId: 'pvtchbot',
       });
     });
   });
@@ -240,49 +243,49 @@ describe('TwitchChannel', () => {
   describe('subscriptions', () => {
     it('records a subscription per sender and type', () => {
       channel.setSubscription(
-        'botlingual',
+        'pvtchbot',
         CHAT,
         'abc',
         'webhook_callback_verification_pending'
       );
 
-      expect(channel.getSubscription('botlingual', CHAT)).toEqual({
-        senderId: 'botlingual',
+      expect(channel.getSubscription('pvtchbot', CHAT)).toEqual({
+        senderId: 'pvtchbot',
         type: CHAT,
         subscriptionId: 'abc',
         status: 'webhook_callback_verification_pending',
         updatedAt: Date.now(),
       });
-      expect(channel.listSubscriptions('botlingual')).toHaveLength(1);
+      expect(channel.listSubscriptions('pvtchbot')).toHaveLength(1);
     });
 
     it('updates status and advances updatedAt', () => {
       channel.setSubscription(
-        'botlingual',
+        'pvtchbot',
         CHAT,
         'abc',
         'webhook_callback_verification_pending'
       );
       vi.advanceTimersByTime(1000);
 
-      channel.setSubscription('botlingual', CHAT, 'abc', 'enabled');
+      channel.setSubscription('pvtchbot', CHAT, 'abc', 'enabled');
 
-      expect(channel.getSubscription('botlingual', CHAT)).toMatchObject({
+      expect(channel.getSubscription('pvtchbot', CHAT)).toMatchObject({
         status: 'enabled',
         updatedAt: Date.now(),
       });
     });
 
     it('clears a subscription', () => {
-      channel.setSubscription('botlingual', CHAT, 'abc', 'enabled');
+      channel.setSubscription('pvtchbot', CHAT, 'abc', 'enabled');
 
-      channel.clearSubscription('botlingual', CHAT);
+      channel.clearSubscription('pvtchbot', CHAT);
 
-      expect(channel.getSubscription('botlingual', CHAT)).toBeNull();
+      expect(channel.getSubscription('pvtchbot', CHAT)).toBeNull();
     });
 
     it('returns null for an unknown type', () => {
-      expect(channel.getSubscription('botlingual', 'nope')).toBeNull();
+      expect(channel.getSubscription('pvtchbot', 'nope')).toBeNull();
     });
   });
 
@@ -426,30 +429,30 @@ describe('TwitchChannel', () => {
     });
 
     it('allows up to 100 per 30 seconds on the moderator tier', () => {
-      channel.setSendTier('botlingual', 'moderator');
+      channel.setSendTier('pvtchbot', 'moderator');
       vi.advanceTimersByTime(30_000);
 
-      expect(channel.getSendTier('botlingual')).toBe('moderator');
+      expect(channel.getSendTier('pvtchbot')).toBe('moderator');
       expect(drain(channel, 100).every((slot) => slot.ok)).toBe(true);
       expect(drain(channel, 1)[0]?.ok).toBe(false);
     });
 
     it('clamps tokens when dropping back to standard', () => {
-      channel.setSendTier('botlingual', 'moderator');
+      channel.setSendTier('pvtchbot', 'moderator');
       vi.advanceTimersByTime(30_000);
 
-      channel.setSendTier('botlingual', 'standard');
+      channel.setSendTier('pvtchbot', 'standard');
 
       expect(drain(channel, 20).every((slot) => slot.ok)).toBe(true);
       expect(drain(channel, 1)[0]?.ok).toBe(false);
     });
 
     it('reports a duplicate send without spending a token', () => {
-      expect(channel.acquireSendSlot('botlingual', 'send:lingual:m1')).toEqual({
+      expect(channel.acquireSendSlot('pvtchbot', 'send:lingual:m1')).toEqual({
         ok: true,
       });
 
-      expect(channel.acquireSendSlot('botlingual', 'send:lingual:m1')).toEqual({
+      expect(channel.acquireSendSlot('pvtchbot', 'send:lingual:m1')).toEqual({
         ok: false,
         duplicate: true,
       });
@@ -459,13 +462,13 @@ describe('TwitchChannel', () => {
 
     it('keeps the claim while waiting for a slot', () => {
       drain(channel, 20);
-      const first = channel.acquireSendSlot('botlingual', 'send:lingual:m1');
+      const first = channel.acquireSendSlot('pvtchbot', 'send:lingual:m1');
       expect(first).toMatchObject({ ok: false, retryAfterMs: 1500 });
       vi.advanceTimersByTime(1500);
 
       // eslint-disable-next-line unicorn/no-null -- retry
-      expect(channel.acquireSendSlot('botlingual', null)).toEqual({ ok: true });
-      expect(channel.acquireSendSlot('botlingual', 'send:lingual:m1')).toEqual({
+      expect(channel.acquireSendSlot('pvtchbot', null)).toEqual({ ok: true });
+      expect(channel.acquireSendSlot('pvtchbot', 'send:lingual:m1')).toEqual({
         ok: false,
         duplicate: true,
       });
@@ -473,30 +476,23 @@ describe('TwitchChannel', () => {
   });
 
   describe('Lingual plugin', () => {
-    it('starts with no language and no ignored chatters', () => {
+    it('starts with no language', () => {
       expect(channel.lingual().getSettings()).toEqual({
         // eslint-disable-next-line unicorn/no-null -- RPC returns null
         language: null,
-        ignoredChatters: [],
       });
     });
 
     it('normalizes and persists settings across instances', () => {
-      channel.lingual().setSettings({
-        language: ' Spanish ',
-        ignoredChatters: ['@StreamElements', 'nightbot', 'NIGHTBOT', ' '],
-      });
+      channel.lingual().setSettings({ language: ' Spanish ' });
       expect(construct().lingual().getSettings()).toEqual({
         language: 'spanish',
-        ignoredChatters: ['streamelements', 'nightbot'],
       });
     });
 
     it('clears the language when given an empty one', () => {
-      channel
-        .lingual()
-        .setSettings({ language: 'english', ignoredChatters: [] });
-      channel.lingual().setSettings({ language: '', ignoredChatters: [] });
+      channel.lingual().setSettings({ language: 'english' });
+      channel.lingual().setSettings({ language: '' });
       expect(channel.lingual().getSettings().language).toBeNull();
     });
   });

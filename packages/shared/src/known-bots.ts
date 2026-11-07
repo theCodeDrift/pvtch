@@ -1003,3 +1003,10 @@ export const knownBots = [
   'kostyar4',
   'drakkusred',
 ];
+
+const KNOWN_BOT_LOGINS = new Set(knownBots.map((login) => login.toLowerCase()));
+
+/** Whether a Twitch login is a known bot, ignoring case. */
+export function isKnownBot(login: string): boolean {
+  return KNOWN_BOT_LOGINS.has(login.toLowerCase());
+}

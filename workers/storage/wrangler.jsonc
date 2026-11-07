@@ -32,6 +32,11 @@
     ],
   },
 
+  "vars": {
+    // How long a channel remembers a message, in milliseconds.
+    "MESSAGE_CACHE_TTL_MS": "300000",
+  },
+
   /**
    * Queue producer: TwitchChannel requests Twitch API work (subscribe,
    * unsubscribe, reconcile) here; only pvtch-twitch's consumer calls Twitch.

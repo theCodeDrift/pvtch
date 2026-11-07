@@ -7,10 +7,7 @@ import { vi } from 'vitest';
 export class FakeChannel {
   claimed = new Set<string>();
   seen = new Set<string>();
-  settings: { language: string | null; ignoredChatters: string[] } = {
-    language: null,
-    ignoredChatters: [],
-  };
+  settings: { language: string | null } = { language: null };
 
   claim(key: string) {
     if (this.claimed.has(key)) return false;
@@ -108,7 +105,7 @@ export function handlerEvent(
     kind: 'handler-event',
     handlerId: 'lingual',
     broadcasterId: event.broadcaster_user_id,
-    senderId: 'botlingual',
+    senderId: 'pvtchbot',
     messageId: 'm-1',
     subscriptionType: 'channel.chat.message',
     timestamp: Date.now(),

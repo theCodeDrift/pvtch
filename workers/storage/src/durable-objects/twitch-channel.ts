@@ -97,7 +97,7 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
   private scheduler: JobScheduler;
   private _lingual: Lingual;
   private _flags: Flags;
-  private _messageCache = new MessageCache();
+  private _messageCache: MessageCache;
 
   constructor(ctx: DurableObjectState, env: StorageEnv) {
     super(ctx, env);
@@ -106,6 +106,7 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     this.scheduler = new JobScheduler(this.sql, ctx, (job) => this.runJob(job));
     this._lingual = new Lingual(this.sql);
     this._flags = new Flags(this.sql);
+    this._messageCache = new MessageCache(env.MESSAGE_CACHE_TTL_MS);
   }
 
   async alarm(): Promise<void> {
