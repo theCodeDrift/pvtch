@@ -309,7 +309,7 @@ export default function BotsLingual() {
         <p className="text-zinc-600 dark:text-zinc-400">
           A chat bot that translates messages in your Twitch chat. It replies in
           a thread under each message that isn&apos;t in your language, so you
-          don&apos;t need Nightbot, Firebot or any other chatbot.
+          can include everyone.
         </p>
       </div>
 
