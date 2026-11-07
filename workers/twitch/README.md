@@ -47,7 +47,7 @@ For local development, follow `.dev.vars.example` to put both secrets in Wrangle
 2. Create the queues: `twitch-events`, `twitch-events-dlq`, and each handler's queue (`lingual-events`, `lingual-events-dlq`).
 3. Put the Twitch app's client secret in the account's Secrets Store as `TWITCH_SECRET` (both workers bind it), and add `TWITCH_EVENTSUB_SECRET` (10–100 random characters) to the same store.
 4. Deploy (see below). The custom domain `twitch.pvtch.com` comes from `routes` in `wrangler.jsonc`.
-5. Log into Twitch **as the bot account**, log into www with it, and open `https://twitch.pvtch.com/bot/authorize?sender=pvtchbot`. This grants the bot `user:bot user:read:chat user:write:chat`.
+5. Log into Twitch **as the bot account**, sign in to www with it, then open `https://twitch.pvtch.com/bot/authorize?sender=pvtchbot`. This grants the bot `user:bot user:read:chat user:write:chat`. Sign in to www first: without a www session as the bot (or an `ADMIN_USERS` login), the page returns an empty 403.
 6. Open `https://twitch.pvtch.com/admin/bootstrap` and press the button. This creates the app-wide `user.authorization.revoke` subscription.
 7. A user in `LINGUAL_PREVIEW_USERS` (a `pvtch` var) opens Bots → Lingual on www and turns it on.
 
