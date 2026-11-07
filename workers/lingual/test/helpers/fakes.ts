@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 /** In-memory stand-in for the parts of TwitchChannel Lingual uses. */
 export class FakeChannel {
   claimed = new Set<string>();
+  seen = new Set<string>();
   settings: { language: string | null; ignoredChatters: string[] } = {
     language: null,
     ignoredChatters: [],
@@ -15,6 +16,16 @@ export class FakeChannel {
     if (this.claimed.has(key)) return false;
     this.claimed.add(key);
     return true;
+  }
+  messageCache() {
+    return {
+      firstSeen: (key: string) => {
+        if (this.seen.has(key)) return false;
+        this.seen.add(key);
+        return true;
+      },
+      [Symbol.dispose]: () => {},
+    };
   }
   lingual() {
     return {

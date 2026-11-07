@@ -17,6 +17,7 @@ import { JobScheduler, type ScheduledJob } from '../helpers/job-scheduler';
 import { twitchChannelMigrations } from './twitch-channel/migrations';
 import { Flags } from './twitch-channel/plugins/flags';
 import { Lingual } from './twitch-channel/plugins/lingual';
+import { MessageCache } from './twitch-channel/plugins/message-cache';
 
 /** How long a claimed key is remembered. Twitch rejects (and we drop)
  * notifications older than 10 minutes, so 15 covers it. */
@@ -86,7 +87,7 @@ const RECONCILE_TASK_PREFIX = 'reconcile-subscriptions:';
  * Holds what every handler shares: handler enablement, EventSub
  * subscription records and chat-send token buckets per sender, key claims
  * for dedupe, and the scheduler. Handler- and feature-specific state lives
- * in RpcTarget plugins (`lingual()`, `flags()`).
+ * in RpcTarget plugins (`lingual()`, `flags()`, `messageCache()`).
  *
  * Makes no Twitch API calls: subscription work is requested by sending
  * `sync` messages to the `twitch-events` queue, which pvtch-twitch consumes.
@@ -96,6 +97,7 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
   private scheduler: JobScheduler;
   private _lingual: Lingual;
   private _flags: Flags;
+  private _messageCache = new MessageCache();
 
   constructor(ctx: DurableObjectState, env: StorageEnv) {
     super(ctx, env);
@@ -116,6 +118,10 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
 
   flags(): Flags {
     return this._flags;
+  }
+
+  messageCache(): MessageCache {
+    return this._messageCache;
   }
 
   getHandler(handlerId: HandlerId): HandlerState {
