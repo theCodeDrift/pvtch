@@ -70,10 +70,27 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
     return this._account.setScopes(userId, scopes);
   }
 
-  rotateAccountToken(
+  async rotateAccountToken(
     userId: string
   ): Promise<{ account: TwitchUserData; previous: string }> {
-    return this._account.rotateToken(userId);
+    const result = await this._account.rotateToken(userId);
+    this.scheduleRevocationRetry();
+    return result;
+  }
+
+  hasPendingAccountRevocations(): boolean {
+    return this._account.hasPendingRevocations();
+  }
+
+  /** If an old token's KV delete failed, retry it on the alarm. */
+  private scheduleRevocationRetry(delaySeconds = 60): void {
+    if (!this._account.hasPendingRevocations()) return;
+    this.scheduler.schedule(
+      delaySeconds,
+      'revoke-tokens',
+      {},
+      { key: 'revoke-tokens' }
+    );
   }
 
   async alarm(): Promise<void> {
@@ -108,6 +125,12 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
             key: 'sync-profile',
           }
         );
+        break;
+      }
+      case 'revoke-tokens': {
+        if (await this._account.retryRevocations()) {
+          this.scheduleRevocationRetry(300);
+        }
         break;
       }
       default: {

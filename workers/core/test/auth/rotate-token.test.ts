@@ -153,4 +153,32 @@ describe('POST /account/token/rotate', () => {
     );
     expect(await isValidToken(USER.token, env)).toBe('u-1');
   });
+
+  it('retries revoking the old token when the KV delete fails', async () => {
+    const { env, accounts } = setup();
+    const del = accounts.delete.bind(accounts);
+    let failures = 1;
+    accounts.delete = (key: string) => {
+      if (failures > 0) {
+        failures -= 1;
+        return Promise.reject(new Error('kv unavailable'));
+      }
+      return del(key);
+    };
+
+    const result = await rotate(env);
+
+    // The rotation stands and this browser stays signed in.
+    expect(result.init?.status).toBeUndefined();
+    expect(accounts.store.get('token-data-tok-1')).toBe('u-1');
+    const user = env.PVTCH_USER.get(env.PVTCH_USER.idFromName('twitch:u-1'));
+    expect(user.hasPendingAccountRevocations()).toBe(true);
+
+    // The scheduled retry finishes the revocation.
+    await user.scheduled({ task: 'revoke-tokens' } as Parameters<
+      typeof user.scheduled
+    >[0]);
+    expect(accounts.store.has('token-data-tok-1')).toBe(false);
+    expect(user.hasPendingAccountRevocations()).toBe(false);
+  });
 });
