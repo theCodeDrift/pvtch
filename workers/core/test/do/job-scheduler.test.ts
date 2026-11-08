@@ -345,15 +345,19 @@ describe('JobScheduler — idempotency key collision on retry', () => {
 
     expect(ran).toEqual(['flaky', 'other']);
     expect(consoleError).toHaveBeenCalled();
-    const flaky = () => allJobs().find((job) => job.task === 'flaky');
-    expect(flaky()?.status).toBe('running');
+    expect(allJobs().find((job) => job.task === 'flaky')?.status).toBe(
+      'running'
+    );
 
     execSpy.mockRestore();
     consoleError.mockRestore();
     vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
     await scheduler.processAlarm({ scheduled: () => {} });
 
-    expect(flaky()).toMatchObject({ status: 'pending', attempt: 1 });
+    expect(allJobs().find((job) => job.task === 'flaky')).toMatchObject({
+      status: 'pending',
+      attempt: 1,
+    });
   });
 });
 
