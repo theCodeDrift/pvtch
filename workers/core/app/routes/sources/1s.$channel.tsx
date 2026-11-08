@@ -13,6 +13,13 @@ import {
 import { useSearchParams } from 'react-router';
 import z from 'zod';
 import { useNoTheme } from '@/hooks/use-no-theme';
+import {
+  applyVote,
+  EMPTY_ROUND,
+  isRoundOver,
+  votingStateAt,
+  type VoteRound,
+} from '@/lib/one-second-vote';
 import { useDocumentVisibilityState, useIntervalWhen } from 'rooks';
 import { Lock, Play, Timer } from 'lucide-react';
 import EE from 'eventemitter3';
@@ -200,9 +207,8 @@ export default function TodoSource() {
   const [rawParameters] = useSearchParams();
   const isDemo = rawParameters.get('demo')?.toLowerCase() === 'true';
   const comfy = useComfy(isDemo ? false : loaderData.channel);
-  const [votes, setVotes] = useState<Map<string, number>>(new Map());
-  const [voters, setVoters] = useState<Map<string, string>>(new Map()); // username -> option
-  const [startTime, setStartTime] = useState<number>(0);
+  const [round, setRound] = useState<VoteRound>(EMPTY_ROUND);
+  const { votes, startTime } = round;
   const [now, setNow] = useState(Date.now());
   const [overrides, setOverrides] = useState<
     Partial<z.infer<typeof parameterParser>>
@@ -237,28 +243,7 @@ export default function TodoSource() {
     isDocumentVisible === 'visible'
   );
 
-  const votingState = useMemo(() => {
-    if (startTime === 0) {
-      return 'ready';
-    }
-
-    if (
-      now >
-      startTime + parameters.duration * 1000 + parameters.cooldown * 1000
-    ) {
-      return 'ready';
-    }
-
-    if (now > startTime + parameters.duration * 1000) {
-      return 'locked';
-    }
-
-    if (now > startTime) {
-      return 'voting';
-    }
-
-    return 'ready';
-  }, [now, startTime, parameters]);
+  const votingState = votingStateAt(startTime, now, parameters);
 
   const vote = useCallback(
     (name: string, option: string) => {
@@ -274,41 +259,15 @@ export default function TodoSource() {
         return;
       }
 
-      const hasVoted = voters.has(name.toLowerCase());
-      const canVote =
-        (parameters.repeat || !hasVoted) &&
-        (votingState === 'voting' || votingState === 'ready');
-
-      if (!canVote) {
-        return;
-      }
-
-      if (votes.size === 0) {
-        setStartTime(Date.now());
-      }
-
-      setVoters((last) => {
-        const next = new Map(last);
-        next.set(name.toLowerCase(), choice);
-        return next;
-      });
-
-      setVotes((last) => {
-        const next = new Map(last);
-        const currentVotes = next.get(choice) ?? 0;
-        next.set(choice, currentVotes + 1);
-        return next;
-      });
+      setRound((last) => applyVote(last, name, choice, Date.now(), parameters));
     },
-    [voters, parameters, votingState]
+    [parameters]
   );
 
   const voteWrapper = useEffectEvent(vote);
 
   const resetVotes = useCallback(() => {
-    setVotes(new Map());
-    setVoters(new Map());
-    setStartTime(0);
+    setRound(EMPTY_ROUND);
   }, []);
 
   // Standalone event emitter for demo mode (same event-driven path as comfy)
@@ -356,20 +315,14 @@ export default function TodoSource() {
     run().catch(console.error);
   }, [demoRunning, resetVotes, parameters.choices]);
 
-  // Reset demo state when the voting cycle completes
-  const prevVotingState = useRef(votingState);
+  // Clear the tallies once the cooldown ends so the next round starts fresh
+  // (applyVote also starts a new round if this hasn't run yet).
+  const roundOver = isRoundOver(round, now, parameters);
   useEffect(() => {
-    if (
-      isDemo &&
-      demoRunning &&
-      prevVotingState.current === 'locked' &&
-      votingState === 'ready'
-    ) {
-      resetVotes();
-      setDemoRunning(false);
-    }
-    prevVotingState.current = votingState;
-  }, [votingState, isDemo, demoRunning, resetVotes]);
+    if (!roundOver) return;
+    resetVotes();
+    setDemoRunning(false);
+  }, [roundOver, resetVotes]);
 
   useEffect(() => {
     const onCommand: ComfyEvents['command'] = (
@@ -394,10 +347,11 @@ export default function TodoSource() {
             .filter((v) => !Number.isNaN(v));
           const [duration, cooldown] = options;
 
-          setOverrides({
+          setOverrides((last) => ({
+            ...last,
             duration: duration && duration > 0 ? duration : undefined,
             cooldown: cooldown && cooldown > 0 ? cooldown : undefined,
-          });
+          }));
           resetVotes();
           break;
         }
@@ -406,9 +360,10 @@ export default function TodoSource() {
           if (mode !== 'one' && mode !== 'many') {
             mode = undefined;
           }
-          setOverrides({
+          setOverrides((last) => ({
+            ...last,
             repeat: mode === 'many' ? true : mode === 'one' ? false : undefined,
-          });
+          }));
           resetVotes();
           break;
         }
@@ -422,9 +377,10 @@ export default function TodoSource() {
             .map((s) => s.trim())
             .filter((v) => v && v.length > 0);
 
-          setOverrides({
+          setOverrides((last) => ({
+            ...last,
             choices: list.length > 0 ? list : undefined,
-          });
+          }));
           resetVotes();
           break;
         }
@@ -453,7 +409,7 @@ export default function TodoSource() {
       events.off('command', onCommand);
       events.off('chat', onChat);
     };
-  }, [events, voteWrapper, setVoters, setStartTime, resetVotes]);
+  }, [events, voteWrapper, resetVotes]);
 
   useEffect(() => {
     if (isDocumentVisible !== 'visible') {

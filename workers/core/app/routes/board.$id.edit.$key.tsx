@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { data, useFetcher, useLoaderData, useRevalidator } from 'react-router';
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 import type { Route } from './+types/board.$id.edit.$key';
+import type { action as revertAction } from './board.$id.edit.$key.revert';
 import { cloudflareEnvironmentContext } from '@/context';
 import { parseBoardId } from '@/lib/board-id';
 import { renderBoardMarkdown } from '@/lib/markdown';
@@ -14,6 +16,14 @@ import { Button } from '@/components/ui/button';
 const POLL_INTERVAL = 5000;
 const HEARTBEAT_INTERVAL = 5000;
 const EDITOR_NAME_KEY = 'pvtch.board.editorName';
+
+const REVERT_ERRORS = {
+  conflict:
+    'Someone else edited the board first. It has been refreshed; try the revert again.',
+  forbidden: 'This edit URL was rotated. Ask the streamer for the new one.',
+  not_found: 'That version or board no longer exists.',
+  bad_request: 'Invalid request. Reload the page and try again.',
+} as const;
 
 export function meta({ data: meta }: Route.MetaArgs) {
   if (!meta?.ok) return [{ title: 'Board Editor' }];
@@ -208,7 +218,7 @@ interface ReadyData {
 function BoardEditorReady({ data: loaderData }: { data: ReadyData }) {
   const saveFetcher = useFetcher<SaveError | SaveSuccess>();
   const presenceFetcher = useFetcher();
-  const revertFetcher = useFetcher();
+  const revertFetcher = useFetcher<typeof revertAction>();
   const revalidator = useRevalidator();
 
   const sessionIdRef = useRef<string | undefined>(undefined);
@@ -294,27 +304,28 @@ function BoardEditorReady({ data: loaderData }: { data: ReadyData }) {
     }
   }, [saveFetcher.state, saveFetcher.data]);
 
-  // After a successful revert, replace local state with the restored content
-  // and revalidate so history/presence/etc. catch up. Track the consumed
-  // version so we don't clobber later edits if a polling revalidation arrives.
-  const consumedRevertVersion = useRef<number>(-1);
+  // After a revert, adopt the restored content on success or explain the
+  // failure. Track the consumed response so a polling revalidation doesn't
+  // replay it and clobber later edits or repeat the toast.
+  const consumedRevert = useRef<unknown>(undefined);
   useEffect(() => {
-    const d = revertFetcher.data as
-      | { ok?: true; version?: number; content?: string }
-      | undefined;
+    const result = revertFetcher.data;
     if (
-      revertFetcher.state === 'idle' &&
-      d?.ok &&
-      typeof d.version === 'number' &&
-      typeof d.content === 'string' &&
-      consumedRevertVersion.current !== d.version
+      revertFetcher.state !== 'idle' ||
+      !result ||
+      consumedRevert.current === result
     ) {
-      consumedRevertVersion.current = d.version;
-      setContent(d.content);
-      setBaseVersion(d.version);
-      setLastSyncedContent(d.content);
-      void revalidator.revalidate();
+      return;
     }
+    consumedRevert.current = result;
+    if ('ok' in result) {
+      setContent(result.content);
+      setBaseVersion(result.version);
+      setLastSyncedContent(result.content);
+    } else {
+      toast.error(REVERT_ERRORS[result.error]);
+    }
+    void revalidator.revalidate();
   }, [revertFetcher.state, revertFetcher.data, revalidator]);
 
   // If the loader returns a newer version AND the user hasn't typed locally
