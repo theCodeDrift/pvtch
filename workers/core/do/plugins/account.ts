@@ -35,6 +35,17 @@ const accountMigrations: Migrations = {
       )
     `);
   },
+  2: (sql) => {
+    // Tokens replaced by a rotation whose `token-data-` entry may still
+    // exist. Recorded with the rotation itself, removed once the delete
+    // succeeds, so a failed delete is retried rather than left valid.
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS pending_revocation (
+        token TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+      )
+    `);
+  },
 };
 
 export type AccountIdentity = Pick<
@@ -76,12 +87,16 @@ export class Account {
       };
       this.write(owned);
 
+      let account: TwitchUserData;
       if (current && sameOwned(current, owned)) {
         // Login always re-asserts the reverse index, as before.
         await this.putTokenIndex(owned);
-        return current;
+        account = current;
+      } else {
+        account = await this.publish(owned, current);
       }
-      return this.publish(owned, current);
+      await this.revokePending();
+      return account;
     });
   }
 
@@ -90,7 +105,9 @@ export class Account {
     return this.exclusive(async () => {
       const current = await this.readKV(userId);
       const owned = this.require(userId, current);
-      return this.publish(owned, current, { scopes });
+      const account = await this.publish(owned, current, { scopes });
+      await this.revokePending();
+      return account;
     });
   }
 
@@ -98,6 +115,10 @@ export class Account {
    * Replace the overlay token. The old `token-data-{old}` entry is deleted,
    * so overlay and API URLs using it stop working. Sessions are tied to the
    * token, so the caller re-issues the current session.
+   *
+   * The old token is recorded for revocation in the same SQLite write as the
+   * new token, so if the KV delete fails (or the DO restarts first) it stays
+   * pending: every later account operation and `retryRevocations` try again.
    */
   rotateToken(
     userId: string
@@ -109,11 +130,59 @@ export class Account {
       while (token === before.token) token = createToken();
       const owned = { ...before, token };
       this.write(owned);
+      this.sql.exec(
+        `INSERT OR IGNORE INTO pending_revocation (token, created_at) VALUES (?, ?)`,
+        before.token,
+        Date.now()
+      );
 
       const account = await this.publish(owned, current);
-      await this.accounts.delete(`${tokenDataKeyPrefix}${before.token}`);
+      await this.revokePending();
       return { account, previous: before.token };
     });
+  }
+
+  /** Retry pending revocations. True if any are still pending. */
+  retryRevocations(): Promise<boolean> {
+    return this.exclusive(async () => {
+      await this.revokePending();
+      return this.hasPendingRevocations();
+    });
+  }
+
+  hasPendingRevocations(): boolean {
+    return this.pendingRevocations().length > 0;
+  }
+
+  /**
+   * Delete `token-data-` for every replaced token. A failure is logged and
+   * left pending for the next try; it never fails the caller's operation.
+   */
+  private async revokePending(): Promise<void> {
+    const currentToken = this.read()?.token;
+    for (const token of this.pendingRevocations()) {
+      if (token === currentToken) {
+        this.forgetRevocation(token);
+        continue;
+      }
+      try {
+        await this.accounts.delete(`${tokenDataKeyPrefix}${token}`);
+        this.forgetRevocation(token);
+      } catch (error) {
+        console.error('revoking a replaced overlay token failed:', error);
+      }
+    }
+  }
+
+  private pendingRevocations(): string[] {
+    const rows = this.sql
+      .exec(`SELECT token FROM pending_revocation`)
+      .toArray() as unknown as { token: string }[];
+    return rows.map((row) => row.token);
+  }
+
+  private forgetRevocation(token: string): void {
+    this.sql.exec(`DELETE FROM pending_revocation WHERE token = ?`, token);
   }
 
   /** Run `task` after every earlier account operation has settled. */
