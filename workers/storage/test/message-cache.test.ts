@@ -44,6 +44,44 @@ describe('MessageCache', () => {
     expect(cache.firstSeen('a')).toBe(true);
   });
 
+  it('lets the owner release a mark early', () => {
+    cache.firstSeen('a', 'q-1');
+
+    expect(cache.release('a', 'q-1')).toBe(true);
+
+    expect(cache.firstSeen('a', 'q-2')).toBe(true);
+  });
+
+  it('keeps a mark another owner set', () => {
+    cache.firstSeen('a', 'q-1');
+
+    expect(cache.release('a', 'q-other')).toBe(false);
+
+    expect(cache.firstSeen('a')).toBe(false);
+  });
+
+  it('keeps a newer mark from a late release', () => {
+    cache.firstSeen('a', 'q-1');
+    vi.advanceTimersByTime(TTL_MS);
+    expect(cache.firstSeen('a', 'q-2')).toBe(true);
+
+    expect(cache.release('a', 'q-1')).toBe(false);
+
+    expect(cache.firstSeen('a')).toBe(false);
+  });
+
+  it('keeps a mark set without an owner', () => {
+    cache.firstSeen('a');
+
+    expect(cache.release('a', 'q-1')).toBe(false);
+
+    expect(cache.firstSeen('a')).toBe(false);
+  });
+
+  it('releases nothing for an unknown key', () => {
+    expect(cache.release('a', 'q-1')).toBe(false);
+  });
+
   it.each(['', 'soon', '0', '-1'])(
     'falls back on a bad lifetime: %j',
     (ttl) => {

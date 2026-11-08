@@ -1,12 +1,16 @@
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { consume } from '../src/consumer';
 import {
+  MAX_RETRIES,
   NO_THREAD_FLAG,
   RETRY_DELAY_SECONDS,
   TRANSLATE_V2_FLAG,
   handleLingualEvent,
 } from '../src/handler';
+import { messageKey } from '../src/lingo/message-key';
 import { translateChatMessageV2 } from '../src/lingo/pipeline-v2';
 import {
   BROADCASTER_ID,
@@ -321,6 +325,140 @@ describe('handleLingualEvent', () => {
 
       expect(outcome).toEqual({ type: 'ack' });
     });
+
+    it('lets a repeat translate after a too-late give-up', async () => {
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), {
+          messageId: 'm-1',
+          timestamp: NOW - 56_000,
+        }),
+        delivery(1, 'q-1')
+      );
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-2' }),
+        delivery(1, 'q-2')
+      );
+
+      expect(t.send).toHaveBeenCalledOnce();
+      expect(t.send).toHaveBeenCalledWith(
+        expect.objectContaining({ sendId: 'lingual:m-2' })
+      );
+    });
+
+    it('lets a repeat translate after the last attempt fails', async () => {
+      t.ai.mockRejectedValue(new Error('AI down'));
+      const m1 = handlerEvent(chatEvent(), { messageId: 'm-1' });
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        await handleLingualEvent(t.env, m1, delivery(attempt, 'q-1'));
+      }
+      const repeat = handlerEvent(chatEvent(), { messageId: 'm-2' });
+      await handleLingualEvent(t.env, repeat, delivery(1, 'q-2'));
+      expect(t.ai).toHaveBeenCalledTimes(MAX_RETRIES);
+
+      const last = await handleLingualEvent(
+        t.env,
+        m1,
+        delivery(MAX_RETRIES + 1, 'q-1')
+      );
+      t.ai.mockResolvedValue(
+        aiResponse({
+          detected: 'Spanish',
+          detectedCode: 'spa',
+          translation: 'hi friends, how is everyone tonight?',
+        })
+      );
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-3' }),
+        delivery(1, 'q-3')
+      );
+
+      expect(last).toMatchObject({ type: 'retry' });
+      expect(t.send).toHaveBeenCalledOnce();
+      expect(t.send).toHaveBeenCalledWith(
+        expect.objectContaining({ sendId: 'lingual:m-3' })
+      );
+    });
+
+    it('keeps a mark another queue message set', async () => {
+      t.ai.mockRejectedValue(new Error('AI down'));
+      const key = await messageKey(chatEvent().message.fragments);
+      t.channel(BROADCASTER_ID).seen.set(key!, 'q-newer');
+
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(),
+        delivery(MAX_RETRIES + 1, 'q-1')
+      );
+
+      expect(t.channel(BROADCASTER_ID).seen.get(key!)).toBe('q-newer');
+    });
+
+    it('still gives up when the release fails', async () => {
+      const channel = t.channel(BROADCASTER_ID);
+      const messageCache = channel.messageCache.bind(channel);
+      vi.spyOn(channel, 'messageCache').mockImplementation(() => ({
+        ...messageCache(),
+        release: () => {
+          throw new Error('no such method');
+        },
+      }));
+
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { timestamp: NOW - 56_000 }),
+        delivery(1)
+      );
+
+      expect(outcome).toEqual({ type: 'ack' });
+      expect(console.warn).toHaveBeenCalledWith(
+        'Lingual could not release a seen message',
+        expect.any(Error)
+      );
+    });
+  });
+
+  it('keeps the mark after a quiet outcome', async () => {
+    t.ai.mockResolvedValue(
+      aiResponse({ detected: 'Spanish', detectedCode: 'spa', translation: '' })
+    );
+
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { messageId: 'm-1' }),
+      delivery(1, 'q-1')
+    );
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { messageId: 'm-2' }),
+      delivery(1, 'q-2')
+    );
+
+    expect(t.ai).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the mark after a reply', async () => {
+    await handleLingualEvent(
+      t.env,
+      handlerEvent(chatEvent(), { messageId: 'm-1' }),
+      delivery(1, 'q-1')
+    );
+
+    const key = await messageKey(chatEvent().message.fragments);
+    expect(t.channel(BROADCASTER_ID).seen.get(key!)).toBe('q-1');
+  });
+});
+
+describe('MAX_RETRIES', () => {
+  it('matches max_retries of the lingual-events consumer', () => {
+    const path = new URL('../wrangler.jsonc', import.meta.url).pathname;
+    const config = readFileSync(path, 'utf8');
+    const match =
+      /"queue":\s*"lingual-events",[^}]*"max_retries":\s*(\d+)/.exec(config);
+
+    expect(Number(match?.[1])).toBe(MAX_RETRIES);
   });
 });
 
