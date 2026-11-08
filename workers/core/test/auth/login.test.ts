@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loader as callbackLoader } from '../../app/routes/auth/callback';
 import { loader as startLoader } from '../../app/routes/auth/start';
+import { sessionUser } from '../../app/lib/twitch-data';
 import { FakeKV, signedIn } from './fake-kv';
+import { fakeUserNamespace } from './fake-user-namespace';
 
 const USER = {
   id: 'u-1',
@@ -17,6 +19,7 @@ function environment(accounts: FakeKV): Env {
     PVTCH_APP_URL: 'https://www.example.com',
     TWITCH_REDIRECT_URI: 'https://www.example.com/auth/callback',
     PVTCH_ACCOUNTS: accounts,
+    PVTCH_USER: fakeUserNamespace(accounts),
   } as unknown as Env;
 }
 
@@ -57,6 +60,16 @@ function mockTwitch(user = USER) {
       }
       throw new Error(`unexpected fetch ${input.url}`);
     })
+  );
+}
+
+/** The account a session cookie resolves to, as the app sees it. */
+function sessionAccount(env: Env, sessionToken: string | undefined) {
+  return sessionUser(
+    new Request('https://www.example.com/', {
+      headers: { Cookie: `pvtch_token=${sessionToken ?? ''}` },
+    }),
+    env
   );
 }
 
@@ -175,5 +188,51 @@ describe('GET /auth/callback', () => {
     expect(
       JSON.parse(accounts.store.get(`session-${sessionToken}`) ?? '')
     ).toEqual({ userId: 'u-1', token: account.token });
+  });
+
+  it('gives concurrent first logins one token and keeps both sessions', async () => {
+    mockTwitch();
+    const accounts = new FakeKV();
+    const env = environment(accounts);
+
+    const responses = await Promise.all(
+      [1, 2, 3].map(() =>
+        callback(env, 'code=c&state=st', 'pvtch_login_state=st')
+      )
+    );
+
+    expect(accounts.keys('token-data-')).toHaveLength(1);
+    const account = JSON.parse(accounts.store.get('twitch-data-u-1') ?? '') as {
+      token: string;
+    };
+    expect(accounts.store.get(`token-data-${account.token}`)).toBe('u-1');
+    for (const response of responses) {
+      const sessionToken = setCookie(response, 'pvtch_token');
+      const resolved = await sessionAccount(env, sessionToken);
+      expect(resolved?.token).toBe(account.token);
+    }
+  });
+
+  it('imports an account that exists only in KV, keeping its token and scopes', async () => {
+    mockTwitch({ ...USER, display_name: 'Renamed' });
+    const accounts = signedIn({ ...USER, scopes: ['channel:bot'] });
+    const env = environment(accounts);
+
+    await callback(env, 'code=c&state=st', 'pvtch_login_state=st');
+
+    expect(JSON.parse(accounts.store.get('twitch-data-u-1') ?? '')).toEqual({
+      ...USER,
+      display_name: 'Renamed',
+      scopes: ['channel:bot'],
+    });
+    expect(accounts.keys('token-data-')).toEqual([`token-data-${USER.token}`]);
+
+    // The DO now holds the token: a lost KV record doesn't mint a new one.
+    accounts.store.delete('twitch-data-u-1');
+    await callback(env, 'code=c&state=st', 'pvtch_login_state=st');
+    expect(JSON.parse(accounts.store.get('twitch-data-u-1') ?? '')).toEqual({
+      ...USER,
+      display_name: 'Renamed',
+    });
   });
 });
