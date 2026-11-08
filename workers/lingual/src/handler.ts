@@ -21,6 +21,10 @@ export const MAX_REPLY_AGE_MS = 60 * 1000;
  * inside MAX_REPLY_AGE_MS. */
 export const RETRY_DELAY_SECONDS = 5;
 
+/** `max_retries` of the lingual-events consumer in wrangler.jsonc (a test
+ * keeps them equal). The attempt after the last retry is the final one. */
+export const MAX_RETRIES = 3;
+
 /** Post as a plain message instead of a threaded reply. */
 export const NO_THREAD_FLAG = 'lingual.no-thread';
 
@@ -98,20 +102,27 @@ export async function handleLingualEvent(
   // must not count as a repeat of itself. Marking before translating keeps
   // concurrent repeats from all reaching the model; if the translation fails,
   // this message keeps the mark and retries, so the burst still gets its one
-  // reply.
-  if (delivery.attempts === 1) {
-    const key = await messageKey(event.message.fragments);
-    if (key) {
-      using cache = await channel.messageCache();
-      if (!(await cache.firstSeen(key))) return ack;
-    }
+  // reply. The mark is this queue message's, so only it can release it.
+  const key = await messageKey(event.message.fragments);
+  if (key && delivery.attempts === 1) {
+    using cache = await channel.messageCache();
+    if (!(await cache.firstSeen(key, delivery.id))) return ack;
   }
 
   const translateMessage = message.flags.includes(TRANSLATE_V2_FLAG)
     ? translateChatMessageV2
     : translateChatMessage;
   const result = await translateMessage(env, event, settings.language);
-  if (result.kind === 'failed') return retryWhileFresh(message, now);
+  if (result.kind === 'failed') {
+    const outcome = retryWhileFresh(message, now);
+    // Giving up without a reply: the retry was skipped as too late, or this
+    // was the last attempt (Queues dead-letters it). Release the mark so the
+    // next identical message gets its chance instead of staying suppressed.
+    if (key && (outcome.type === 'ack' || delivery.attempts > MAX_RETRIES)) {
+      await releaseSeen(channel, key, delivery.id);
+    }
+    return outcome;
+  }
   if (result.kind === 'quiet') return ack;
 
   const send: TwitchSendMessage = {
@@ -129,6 +140,20 @@ export async function handleLingualEvent(
   };
   await env.TWITCH_EVENTS.send(send);
   return ack;
+}
+
+/** Best effort: if the release fails, the mark just expires on its own. */
+async function releaseSeen(
+  channel: ReturnType<typeof channelStub>,
+  key: string,
+  owner: string
+): Promise<void> {
+  try {
+    using cache = await channel.messageCache();
+    await cache.release(key, owner);
+  } catch (error) {
+    console.warn('Lingual could not release a seen message', error);
+  }
 }
 
 /** Retry a failed translation, unless the retry would land after the reply

@@ -7,7 +7,8 @@ import { vi } from 'vitest';
 export class FakeChannel {
   /** Claimed keys and their owners. */
   claimed = new Map<string, string | undefined>();
-  seen = new Set<string>();
+  /** Seen message keys and who marked them. */
+  seen = new Map<string, string | undefined>();
   settings: { language: string | null } = { language: null };
 
   /** Same rules as TwitchChannel.claim: the owner may claim again; anyone
@@ -22,9 +23,14 @@ export class FakeChannel {
   }
   messageCache() {
     return {
-      firstSeen: (key: string) => {
+      firstSeen: (key: string, owner?: string) => {
         if (this.seen.has(key)) return false;
-        this.seen.add(key);
+        this.seen.set(key, owner);
+        return true;
+      },
+      release: (key: string, owner: string) => {
+        if (!this.seen.has(key) || this.seen.get(key) !== owner) return false;
+        this.seen.delete(key);
         return true;
       },
       [Symbol.dispose]: () => {},

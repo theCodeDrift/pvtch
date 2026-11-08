@@ -16,7 +16,7 @@ export const MESSAGE_CACHE_MAX_KEYS = 10_000;
  * oldest key is always the next to expire.
  */
 export class MessageCache extends RpcTarget {
-  private expiries = new Map<string, number>();
+  private marks = new Map<string, { expiresAt: number; owner?: string }>();
   private ttlMs: number;
 
   constructor(ttlMs: string) {
@@ -31,22 +31,35 @@ export class MessageCache extends RpcTarget {
   }
 
   /** True the first time a key is seen within the window, false for every
-   * repeat. A repeat doesn't extend the window. */
-  firstSeen(key: string): boolean {
+   * repeat. A repeat doesn't extend the window. `owner` names who set the
+   * mark, so only they can `release` it. */
+  firstSeen(key: string, owner?: string): boolean {
     const now = Date.now();
     this.prune(now);
-    if (this.expiries.has(key)) return false;
+    if (this.marks.has(key)) return false;
 
-    this.expiries.set(key, now + this.ttlMs);
+    this.marks.set(key, { expiresAt: now + this.ttlMs, owner });
+    return true;
+  }
+
+  /** Forget a key early, so its next sighting counts as the first. Only the
+   * owner that set the mark may release it: a late release from a message
+   * whose mark already expired must not clear a newer message's mark. True
+   * if the mark was released. */
+  release(key: string, owner: string): boolean {
+    const mark = this.marks.get(key);
+    if (mark?.owner !== owner) return false;
+
+    this.marks.delete(key);
     return true;
   }
 
   private prune(now: number): void {
-    for (const [key, expiresAt] of this.expiries) {
-      if (expiresAt > now && this.expiries.size < MESSAGE_CACHE_MAX_KEYS) {
+    for (const [key, { expiresAt }] of this.marks) {
+      if (expiresAt > now && this.marks.size < MESSAGE_CACHE_MAX_KEYS) {
         return;
       }
-      this.expiries.delete(key);
+      this.marks.delete(key);
     }
   }
 }
