@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every PR, including stacked PRs whose base is another feature branch.
+  # Nothing below diffs against the base, so no base ref handling is needed.
   pull_request:
-    branches: [main]
 
 # Cancel an older run if a newer one starts on the same ref. Saves CI minutes
 # when someone pushes a fixup before the previous run finishes.
