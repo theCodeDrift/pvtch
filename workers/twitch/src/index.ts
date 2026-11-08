@@ -6,6 +6,8 @@
  * syncs subscriptions, and posts handlers' replies to chat. User-facing
  * settings live on www (pvtch).
  */
+import { consumeDeadLetters } from '@pvtch/shared/dead-letter';
+
 import { consume } from './consumer';
 import { handleEventSub } from './eventsub/webhook';
 import { adminBootstrap } from './routes/admin-bootstrap';
@@ -46,6 +48,10 @@ export default {
   },
 
   async queue(batch, env): Promise<void> {
+    if (batch.queue === 'twitch-events-dlq') {
+      consumeDeadLetters(batch);
+      return;
+    }
     await consume(batch, env);
   },
 } satisfies ExportedHandler<Env>;
