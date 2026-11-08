@@ -9,6 +9,7 @@ import {
 import { loader as loginLoader } from '../../app/routes/auth/start';
 import type { TwitchUserData } from '../../app/lib/twitch-data';
 import { type FakeKV, signedIn } from './fake-kv';
+import { fakeUserNamespace } from './fake-user-namespace';
 
 const USER: TwitchUserData = {
   id: 'u-1',
@@ -25,6 +26,7 @@ function setup(user: TwitchUserData = USER) {
     PVTCH_APP_URL: 'https://www.example.com',
     TWITCH_REDIRECT_URI: 'https://www.example.com/auth/callback',
     PVTCH_ACCOUNTS: accounts,
+    PVTCH_USER: fakeUserNamespace(accounts),
   } as unknown as Env;
   return { env, accounts };
 }
@@ -53,18 +55,21 @@ async function begin(env: Env, query: string) {
   return { response, location, cookie };
 }
 
-function mockTwitch(approvingId: string, scope: string[]) {
+function mockTwitch(
+  approvingId: string,
+  scope: string[],
+  meanwhile: () => Promise<unknown> = () => Promise.resolve()
+) {
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: string | URL) => {
+    vi.fn(async (input: string | URL) => {
       const url = String(input);
       if (url.endsWith('/oauth2/token')) {
-        return Promise.resolve(
-          Response.json({ access_token: 'user-token', scope })
-        );
+        return Response.json({ access_token: 'user-token', scope });
       }
       if (url.endsWith('/helix/users')) {
-        return Promise.resolve(Response.json({ data: [{ id: approvingId }] }));
+        await meanwhile();
+        return Response.json({ data: [{ id: approvingId }] });
       }
       throw new Error(`unexpected fetch ${url}`);
     })
@@ -203,6 +208,28 @@ describe('GET /auth/grant/callback', () => {
       'user-token'
     );
     expect(response.headers.get('Set-Cookie')).toContain('Max-Age=0');
+  });
+
+  it('keeps a token rotation that lands while the grant is in flight', async () => {
+    const { env, accounts } = setup();
+    let rotated = '';
+    mockTwitch(USER.id, ['channel:bot'], async () => {
+      const result = await env.PVTCH_USER.get(
+        env.PVTCH_USER.idFromName('twitch:u-1')
+      ).rotateAccountToken('u-1');
+      rotated = result.account.token;
+    });
+
+    await callback(env, (state) => `code=c&state=${state}`);
+
+    expect(rotated).not.toBe(USER.token);
+    expect(storedUser(accounts)).toEqual({
+      ...USER,
+      token: rotated,
+      scopes: ['channel:bot'],
+    });
+    expect(accounts.store.get(`token-data-${rotated}`)).toBe('u-1');
+    expect(accounts.store.has(`token-data-${USER.token}`)).toBe(false);
   });
 
   it('refuses a grant approved by a different Twitch account', async () => {

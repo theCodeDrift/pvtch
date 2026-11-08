@@ -1,11 +1,7 @@
 import { redirect } from 'react-router';
 import type { Route } from './+types/callback';
 import { cloudflareEnvironmentContext } from '@/context';
-import {
-  tokenDataKeyPrefix,
-  twitchDataKeyPrefix,
-  type TwitchUserData,
-} from '@/lib/twitch-data';
+import type { TwitchUserData } from '@/lib/twitch-data';
 import { createToken } from '@/lib/create-token';
 import {
   LOGIN_STATE_COOKIE,
@@ -157,31 +153,15 @@ async function completeLogin(request: Request, env: Env): Promise<Response> {
   const userData: TwitchUserDataResponse = await userResponse.json();
   const user = userData.data[0];
 
-  const existing = await env.PVTCH_ACCOUNTS.get<TwitchUserData>(
-    `${twitchDataKeyPrefix}${user.id}`,
-    'json'
-  );
-
-  let account: TwitchUserData;
-  if (existing) {
-    account = existing;
-  } else {
-    account = {
-      id: user.id,
-      login: user.login,
-      display_name: user.display_name,
-      token: createToken(),
-    };
-    await env.PVTCH_ACCOUNTS.put(
-      `${twitchDataKeyPrefix}${user.id}`,
-      JSON.stringify(account)
-    );
-  }
-
-  await env.PVTCH_ACCOUNTS.put(
-    `${tokenDataKeyPrefix}${account.token}`,
-    user.id
-  );
+  // The user's DO is the single writer for the account: concurrent first
+  // logins all get the one overlay token it mints.
+  const account = await env.PVTCH_USER.get(
+    env.PVTCH_USER.idFromName(`twitch:${user.id}`)
+  ).ensureAccount({
+    id: user.id,
+    login: user.login,
+    display_name: user.display_name,
+  });
 
   const sessionToken = await startSession(request, env, account);
 

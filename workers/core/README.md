@@ -124,7 +124,7 @@ Users authenticate via Twitch OAuth. The flow:
 
 Each user has two separate values in the `PVTCH_ACCOUNTS` KV namespace:
 
-- **Overlay key** (`token` on `twitch-data-{id}`, reverse-mapped by `token-data-{token}`): created once and never changed. It's part of the user's overlay and API URLs (`/sources/progress/:token/…`, `/progress/:token/…`, `/lingo/…/:token`), and those routes validate it with `isValidToken`. It is not a login.
+- **Overlay key** (`token` on `twitch-data-{id}`, reverse-mapped by `token-data-{token}`): minted once by the user's `User` Durable Object, which is the single writer for the account (KV is its read model), and changed only when the user rotates it from the welcome page (`POST /account/token/rotate`), which deletes the old `token-data-` entry. It's part of the user's overlay and API URLs (`/sources/progress/:token/…`, `/progress/:token/…`, `/lingo/…/:token`), and those routes validate it with `isValidToken`. It is not a login.
 - **Session** (`session-{sessionToken}` → `{ userId, token }`, 30-day expiry): one per sign-in. The `pvtch_token` cookie holds the session token. Pages resolve it in `app/middleware/auth.ts` through `@pvtch/shared/session`, which pvtch-twitch also uses. A session only resolves while its `token` still matches the account's overlay key.
 
 `pvtch_token` is HttpOnly, so page scripts can't read it; the header gets the signed-in name from the layout loader. Signing out POSTs to `/auth/logout`, which deletes the session record and clears both cookies.

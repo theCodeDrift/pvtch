@@ -1,11 +1,7 @@
 import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 import { readCookie } from '@/lib/session-cookie';
-import {
-  sessionUser,
-  twitchDataKeyPrefix,
-  type TwitchUserData,
-} from '@/lib/twitch-data';
+import { sessionUser, type TwitchUserData } from '@/lib/twitch-data';
 
 /**
  * The one place pvtch asks a user for extra Twitch scopes. The user
@@ -196,11 +192,11 @@ export async function completeGrant(
     );
   }
 
-  const updated: TwitchUserData = { ...user, scopes: token.scope };
-  await env.PVTCH_ACCOUNTS.put(
-    `${twitchDataKeyPrefix}${user.id}`,
-    JSON.stringify(updated)
-  );
+  // Through the account's writer, so a concurrent login or token rotation
+  // isn't overwritten by this request's earlier read of the record.
+  await env.PVTCH_USER.get(
+    env.PVTCH_USER.idFromName(`twitch:${user.id}`)
+  ).setAccountScopes(user.id, token.scope);
 
   return redirect(
     withParameter(returnTo, 'granted', token.scope.join(' ')),

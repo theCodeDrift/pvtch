@@ -8,6 +8,7 @@ import { Progress } from './plugins/progress';
 import { Lingo } from './plugins/lingo';
 import { Profile } from './plugins/profile';
 import { Board } from './plugins/board';
+import { Account, type AccountIdentity } from './plugins/account';
 import {
   type TwitchUserData,
   twitchDataKeyPrefix,
@@ -22,6 +23,7 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
   private _lingo: Lingo;
   private _profile: Profile;
   private _board: Board;
+  private _account: Account;
   private scheduler: JobScheduler;
   // Per-instance latch: ensureProfileSync() is called from the lingo translate
   // path on every chat message. The scheduler's idempotency check still costs
@@ -36,6 +38,7 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
     this._lingo = new Lingo(sql);
     this._profile = new Profile(sql);
     this._board = new Board(sql);
+    this._account = new Account(sql, env.PVTCH_ACCOUNTS);
     this.scheduler = new JobScheduler(sql, ctx);
   }
 
@@ -53,6 +56,24 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
 
   board(): Board {
     return this._board;
+  }
+
+  /**
+   * The account's single writer: first login, scope grants and token
+   * rotation all go through these, never straight to KV. See Account.
+   */
+  ensureAccount(identity: AccountIdentity): Promise<TwitchUserData> {
+    return this._account.ensure(identity);
+  }
+
+  setAccountScopes(userId: string, scopes: string[]): Promise<TwitchUserData> {
+    return this._account.setScopes(userId, scopes);
+  }
+
+  rotateAccountToken(
+    userId: string
+  ): Promise<{ account: TwitchUserData; previous: string }> {
+    return this._account.rotateToken(userId);
   }
 
   async alarm(): Promise<void> {
