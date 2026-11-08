@@ -27,7 +27,7 @@ import {
   lingualEnableCookie,
   lingualGrantUrl,
 } from '@/lib/lingual';
-import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/twitch-data';
+import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/account-record';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -8,11 +8,13 @@ name: Deploy Workers
 # Behavior:
 # - main: real deploy. Every other ref: `--dry-run` (builds the bundle,
 #   never pushes or activates, needs no API token): safe per-branch validation.
-# - Two-phase, storage-first: `@pvtch/storage` defines the Durable Objects the
-#   other workers bind via `script_name: pvtch-storage`, so it deploys first
-#   when affected, decoupled from its binders. We do NOT use a `^deploy`
-#   task dependency: that redeploys storage on every binder change and couples
-#   a binder's deploy to it.
+# - Three-phase, storage-first: `@pvtch/storage` defines the Durable Objects
+#   the other workers bind via `script_name: pvtch-storage`, so it deploys
+#   first when affected, decoupled from its binders. `@pvtch/core` (script
+#   `pvtch`) deploys next: pvtch-twitch binds its `User` DO and calls its RPC
+#   methods, so a new method must be live before twitch calls it. We do NOT
+#   use a `^deploy` task dependency: that redeploys a DO host on every binder
+#   change and couples a binder's deploy to it.
 # - Affected-scoped via turbo: only workers whose inputs changed deploy.
 # - The real (main) deploy warns and skips when CLOUDFLARE_API_TOKEN is absent.
 #
@@ -64,7 +66,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Deploy (two-phase storage-first; dry-run off main)
+      - name: Deploy (storage, then core, then the rest; dry-run off main)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -96,6 +98,10 @@ jobs:
           pnpm exec turbo run deploy --filter="@pvtch/storage[$BASE]" $DRY
           echo "::endgroup::"
 
-          echo "::group::Phase 2: affected workers except storage"
-          pnpm exec turbo run deploy --filter="...[$BASE]" --filter="!@pvtch/storage" $DRY
+          echo "::group::Phase 2: core (iff affected)"
+          pnpm exec turbo run deploy --filter="@pvtch/core[$BASE]" $DRY
+          echo "::endgroup::"
+
+          echo "::group::Phase 3: affected workers except storage and core"
+          pnpm exec turbo run deploy --filter="...[$BASE]" --filter="!@pvtch/storage" --filter="!@pvtch/core" $DRY
           echo "::endgroup::"

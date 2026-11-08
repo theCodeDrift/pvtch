@@ -217,6 +217,19 @@ export class FakeChannel {
   }
 }
 
+/** In-memory stand-in for core's User DO (the account writer). */
+export class FakeUser {
+  clearedScopes = 0;
+  /** Set to make `clearAccountScopes` reject, as an unreachable DO would. */
+  failure: Error | undefined;
+
+  clearAccountScopes(_userId: string) {
+    if (this.failure) return Promise.reject(this.failure);
+    this.clearedScopes += 1;
+    return Promise.resolve();
+  }
+}
+
 export class FakeKV {
   store = new Map<string, string>();
   get(key: string, type?: 'json') {
@@ -242,6 +255,8 @@ export interface TestEnv {
   lingualSend: ReturnType<typeof vi.fn>;
   kv: FakeKV;
   accounts: FakeKV;
+  users: Map<string, FakeUser>;
+  user: (id: string) => FakeUser;
 }
 
 export function createTestEnv(): TestEnv {
@@ -252,6 +267,16 @@ export function createTestEnv(): TestEnv {
     if (!found) {
       found = new FakeChannel();
       channels.set(key, found);
+    }
+    return found;
+  };
+  const users = new Map<string, FakeUser>();
+  const user = (id: string) => {
+    const key = `twitch:${id}`;
+    let found = users.get(key);
+    if (!found) {
+      found = new FakeUser();
+      users.set(key, found);
     }
     return found;
   };
@@ -276,9 +301,23 @@ export function createTestEnv(): TestEnv {
       idFromName: (name: string) => name,
       get: (name: string) => channel(name.slice('twitch:'.length)),
     },
+    PVTCH_USER: {
+      idFromName: (name: string) => name,
+      get: (name: string) => user(name.slice('twitch:'.length)),
+    },
   } as unknown as Env;
 
-  return { env, channels, channel, send, lingualSend, kv, accounts };
+  return {
+    env,
+    channels,
+    channel,
+    send,
+    lingualSend,
+    kv,
+    accounts,
+    users,
+    user,
+  };
 }
 
 /** Route-matching fetch mock. Unmatched requests fail the test loudly. */

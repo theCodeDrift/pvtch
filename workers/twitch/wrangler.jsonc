@@ -10,7 +10,8 @@
  *   TWITCH_SECRET           Twitch app client secret (shared with pvtch)
  *   TWITCH_EVENTSUB_SECRET  EventSub webhook signing secret (10-100 chars)
  *
- * Deploy order: pvtch-storage first (TWITCH_CHANNEL). The twitch-events and
+ * Deploy order: pvtch-storage first (TWITCH_CHANNEL), then pvtch
+ * (PVTCH_USER), then this worker. The twitch-events and
  * every handler queue (lingual-events) must exist.
  */
 {
@@ -82,6 +83,14 @@
         "name": "TWITCH_CHANNEL",
         "class_name": "TwitchChannel",
         "script_name": "pvtch-storage",
+      },
+      {
+        // Core's account writer: a Twitch revoke clears scopes through it,
+        // never by writing PVTCH_ACCOUNTS. Lives in pvtch (workers/core),
+        // which deploys before this worker. See STYLEGUIDE-CODE.md.
+        "name": "PVTCH_USER",
+        "class_name": "User",
+        "script_name": "pvtch",
       },
     ],
   },

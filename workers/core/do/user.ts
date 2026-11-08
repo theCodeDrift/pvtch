@@ -12,7 +12,7 @@ import { Account, type AccountIdentity } from './plugins/account';
 import {
   type TwitchUserData,
   twitchDataKeyPrefix,
-} from '../app/lib/twitch-data';
+} from '../app/lib/account-record';
 
 /**
  * User - SQLite-backed Durable Object for per-user storage.
@@ -68,6 +68,11 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
 
   setAccountScopes(userId: string, scopes: string[]): Promise<TwitchUserData> {
     return this._account.setScopes(userId, scopes);
+  }
+
+  /** Forget the account's scopes (Twitch revoke). Called by pvtch-twitch. */
+  clearAccountScopes(userId: string): Promise<TwitchUserData | undefined> {
+    return this._account.clearScopes(userId);
   }
 
   async rotateAccountToken(

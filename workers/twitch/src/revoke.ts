@@ -1,16 +1,17 @@
 import { ack, type Outcome } from '@pvtch/shared/queue-outcome';
 import type { HandlerId } from '@pvtch/shared/twitch-registry';
 
+import { accountStub } from './account';
 import { channelStub } from './channel';
 import type { AuthorizationRevokeEvent } from './eventsub/schemas';
-
-const TWITCH_DATA_PREFIX = 'twitch-data-';
 
 /**
  * A user disconnected pvtch on Twitch: every scope they granted is gone.
  * Disable each of their enabled handlers (each schedules its sender's
  * subscription sync) and forget their recorded scopes so the dashboard asks
- * again.
+ * again. Scopes are cleared through core's account writer, which serializes
+ * it with logins, grants and token rotation. A failure throws, and the
+ * consumer retries the whole message.
  */
 export async function handleAuthorizationRevoke(
   env: Env,
@@ -22,14 +23,6 @@ export async function handleAuthorizationRevoke(
     await channel.disableHandler(handlerId);
   }
 
-  const key = `${TWITCH_DATA_PREFIX}${event.user_id}`;
-  const data = await env.PVTCH_ACCOUNTS.get<Record<string, unknown>>(
-    key,
-    'json'
-  );
-  if (data && 'scopes' in data) {
-    const { scopes: _removed, ...rest } = data;
-    await env.PVTCH_ACCOUNTS.put(key, JSON.stringify(rest));
-  }
+  await accountStub(env, event.user_id).clearAccountScopes(event.user_id);
   return ack;
 }

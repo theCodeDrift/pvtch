@@ -195,31 +195,58 @@ describe('router', () => {
 });
 
 describe('authorization revoke', () => {
-  it('disables every enabled handler and clears recorded scopes', async () => {
+  const revoke = {
+    kind: 'event',
+    messageId: 'r-1',
+    subscriptionType: 'user.authorization.revoke',
+    condition: { client_id: 'client-id' },
+    timestamp: NOW,
+    event: { client_id: 'client-id', user_id: 'u-7', user_login: null },
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('disables every enabled handler and clears scopes through the account writer', async () => {
     const t = createTestEnv();
     t.channel('u-7').enableHandler('lingual');
-    await t.accounts.put(
-      'twitch-data-u-7',
-      JSON.stringify({ id: 'u-7', login: 'someone', scopes: ['channel:bot'] })
-    );
+    const record = JSON.stringify({
+      id: 'u-7',
+      login: 'someone',
+      token: 'tok-7',
+      scopes: ['channel:bot'],
+    });
+    await t.accounts.put('twitch-data-u-7', record);
 
-    await handleQueueMessage(
-      t.env,
-      {
-        kind: 'event',
-        messageId: 'r-1',
-        subscriptionType: 'user.authorization.revoke',
-        condition: { client_id: 'client-id' },
-        timestamp: Date.now(),
-        event: { client_id: 'client-id', user_id: 'u-7', user_login: null },
-      },
-      'q-1'
-    );
+    expect(await handleQueueMessage(t.env, revoke, 'q-1')).toEqual({
+      type: 'ack',
+    });
 
     expect(t.channel('u-7').listHandlers()).toEqual([]);
-    expect(JSON.parse(t.accounts.store.get('twitch-data-u-7') ?? '{}')).toEqual(
-      { id: 'u-7', login: 'someone' }
-    );
+    expect(t.user('u-7').clearedScopes).toBe(1);
+    // The record is core's to write; pvtch-twitch leaves KV alone.
+    expect(t.accounts.store.get('twitch-data-u-7')).toBe(record);
+  });
+
+  it('retries the message when the account writer fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = createTestEnv();
+    t.channel('u-7').enableHandler('lingual');
+    t.user('u-7').failure = new Error('RPC method missing');
+    const message = {
+      id: 'q-1',
+      body: revoke,
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+
+    await consume({ messages: [message] } as unknown as MessageBatch, t.env);
+
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(t.channel('u-7').listHandlers()).toEqual([]);
   });
 });
 

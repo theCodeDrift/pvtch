@@ -4,7 +4,7 @@ import {
   tokenDataKeyPrefix,
   twitchDataKeyPrefix,
   type TwitchUserData,
-} from '../../app/lib/twitch-data';
+} from '../../app/lib/account-record';
 
 /**
  * The account record's source of truth. Every core write to
@@ -13,9 +13,9 @@ import {
  * serialized per Twitch user. KV stays the read model for every worker.
  *
  * The DO owns the identity fields (id, login, display_name, token). Other
- * fields on the KV record (`scopes`, which pvtch-twitch also clears on
- * revoke) are carried over from the current KV record when publishing, unless
- * the write sets them.
+ * fields on the KV record (`scopes`) are carried over from the current KV
+ * record when publishing, unless the write sets or clears them. pvtch-twitch
+ * clears scopes on revoke through `clearScopes`, never by writing KV.
  *
  * Atomicity: every operation runs inside `exclusive`, an in-memory queue,
  * so a whole read-decide-write-publish completes before the next one
@@ -106,6 +106,28 @@ export class Account {
       const current = await this.readKV(userId);
       const owned = this.require(userId, current);
       const account = await this.publish(owned, current, { scopes });
+      await this.revokePending();
+      return account;
+    });
+  }
+
+  /**
+   * Forget every granted scope (the user revoked pvtch on Twitch), keeping
+   * the token and every other field. No-op for an unknown user, or when no
+   * scopes are recorded and the read model is current.
+   */
+  clearScopes(userId: string): Promise<TwitchUserData | undefined> {
+    return this.exclusive(async () => {
+      const current = await this.readKV(userId);
+      if (!current && !this.read()) return;
+      const owned = this.require(userId, current);
+      let account: TwitchUserData;
+      if (current && !('scopes' in current) && sameOwned(current, owned)) {
+        account = current;
+      } else {
+        const { scopes: _cleared, ...rest } = current ?? {};
+        account = await this.publish(owned, { ...owned, ...rest });
+      }
       await this.revokePending();
       return account;
     });

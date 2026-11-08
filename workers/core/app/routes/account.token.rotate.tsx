@@ -3,7 +3,7 @@ import type { Route } from './+types/account.token.rotate';
 import { cloudflareEnvironmentContext, userContext } from '@/context';
 import { importLegacyLingoConfig } from '@/lib/lingo-legacy';
 import { SESSION_COOKIE, readCookie } from '@/lib/session-cookie';
-import type { TwitchUserData } from '@/lib/twitch-data';
+import type { TwitchUserData } from '@/lib/account-record';
 import { authMiddleware } from '@/middleware/auth';
 import {
   SESSION_PREFIX,

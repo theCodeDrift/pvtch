@@ -1,7 +1,8 @@
 import { readSecret } from '@pvtch/shared/secrets';
 import { z } from 'zod';
 import { readCookie } from '@/lib/session-cookie';
-import { sessionUser, type TwitchUserData } from '@/lib/twitch-data';
+import type { TwitchUserData } from '@/lib/account-record';
+import { sessionUser } from '@/lib/twitch-data';
 
 /**
  * The one place pvtch asks a user for extra Twitch scopes. The user

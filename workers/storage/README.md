@@ -23,7 +23,7 @@ Generate types from both configs (`wrangler types -c wrangler.jsonc -c ../storag
 
 ## Deploy order
 
-**Storage deploys before any worker that binds it.** A binder whose `script_name` target is missing, or that binds a class storage doesn't export yet, fails to deploy. `.github/workflows/deploy.yml` enforces the order by deploying `@pvtch/storage` first (phase 1) and every other affected worker after it (phase 2). Cloudflare Workers Builds can't order deploys across workers, so pvtch doesn't use it.
+**Storage deploys before any worker that binds it.** A binder whose `script_name` target is missing, or that binds a class storage doesn't export yet, fails to deploy. `.github/workflows/deploy.yml` enforces the order by deploying `@pvtch/storage` first (phase 1), then `@pvtch/core` (phase 2, since pvtch-twitch binds its `User` DO), then every other affected worker (phase 3). Cloudflare Workers Builds can't order deploys across workers, so pvtch doesn't use it.
 
 **Removing a Durable Object class takes two releases:**
 
