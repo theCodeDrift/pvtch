@@ -317,9 +317,63 @@ describe('JobScheduler — idempotency key collision on retry', () => {
     );
     expect(allJobs().some((job) => job.status === 'running')).toBe(false);
   });
+  it('keeps going when recording a failure itself fails', async () => {
+    scheduler.schedule(new Date(Date.now() - 1000), 'flaky', {});
+    scheduler.schedule(0, 'other', {});
+    const ran: string[] = [];
+    const exec = sql.exec.bind(sql);
+    const execSpy = vi
+      .spyOn(sql, 'exec')
+      .mockImplementation((query: string, ...bindings: unknown[]) => {
+        if (query.includes("SET status = 'pending', attempt")) {
+          throw new Error('disk full');
+        }
+        return exec(query, ...bindings);
+      });
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    await expect(
+      scheduler.processAlarm({
+        scheduled: (job) => {
+          ran.push(job.task);
+          if (job.task === 'flaky') throw new Error('kv down');
+        },
+      })
+    ).resolves.toBeUndefined();
+
+    expect(ran).toEqual(['flaky', 'other']);
+    expect(consoleError).toHaveBeenCalled();
+    const flaky = () => allJobs().find((job) => job.task === 'flaky');
+    expect(flaky()?.status).toBe('running');
+
+    execSpy.mockRestore();
+    consoleError.mockRestore();
+    vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+    await scheduler.processAlarm({ scheduled: () => {} });
+
+    expect(flaky()).toMatchObject({ status: 'pending', attempt: 1 });
+  });
 });
 
 describe('JobScheduler — expired leases', () => {
+  it('defers a recovered retry to the next alarm, even with zero backoff', async () => {
+    scheduler.schedule(0, 'sync-profile', {}, { backoffBaseSeconds: 0 });
+    database
+      .prepare(`UPDATE jobs SET status = 'running', started_at = ?`)
+      .run(Date.now());
+    vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+    const ran: string[] = [];
+
+    await scheduler.processAlarm({
+      scheduled: (job) => void ran.push(job.task),
+    });
+
+    expect(ran).toEqual([]);
+    expect(allJobs()[0]).toMatchObject({ status: 'pending', attempt: 1 });
+  });
+
   const noop = { scheduled: () => {} };
 
   it('tracks schema version at 6 with a started_at column', () => {
