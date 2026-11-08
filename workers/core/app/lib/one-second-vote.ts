@@ -81,3 +81,61 @@ export function applyVote(
     voters,
   };
 }
+
+/** Settings the `!1s` mod commands can override. */
+export interface CommandOverrides {
+  duration?: number;
+  cooldown?: number;
+  repeat?: boolean;
+  choices?: string[];
+}
+
+/**
+ * The overrides a broadcaster/mod `!1s` command sets: `{}` for `!1s reset`,
+ * undefined for an unknown command. A key set to undefined falls back to the
+ * URL parameter. Merge the result into the current overrides with
+ * `{ ...last, ...patch }` so one command never wipes another's settings.
+ */
+export function commandOverrides(
+  command: string,
+  message: string
+): CommandOverrides | undefined {
+  const args = message
+    .split(/ /g)
+    .map((s) => s.trim().toLocaleLowerCase())
+    .filter((v) => v && v.length > 0);
+  switch (`${command.toLocaleLowerCase()} ${args[0]}`) {
+    case '1s timer': {
+      const [duration, cooldown] = (args[1]?.split('/') ?? [])
+        .map((v) => Number.parseInt(v, 10))
+        .filter((v) => !Number.isNaN(v));
+      return {
+        duration: duration && duration > 0 ? duration : undefined,
+        cooldown: cooldown && cooldown > 0 ? cooldown : undefined,
+      };
+    }
+    case '1s vote': {
+      const mode = args[1];
+      return {
+        repeat: mode === 'many' ? true : mode === 'one' ? false : undefined,
+      };
+    }
+    case '1s list': {
+      const list = message
+        .split(/ /g)
+        .map((s) => s.trim())
+        .filter((v, index) => index !== 0 && v && v.length > 0)
+        .join(' ')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((v) => v && v.length > 0);
+      return { choices: list.length > 0 ? list : undefined };
+    }
+    case '1s reset': {
+      return {};
+    }
+    default: {
+      return undefined;
+    }
+  }
+}

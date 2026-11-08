@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyVote,
+  commandOverrides,
+  type CommandOverrides,
   EMPTY_ROUND,
   isRoundOver,
   votingStateAt,
@@ -65,5 +67,45 @@ describe('applyVote', () => {
     expect(isRoundOver(round, start, timing)).toBe(false);
     expect(isRoundOver(round, start + 15_000, timing)).toBe(false);
     expect(isRoundOver(EMPTY_ROUND, start + 99_000, timing)).toBe(false);
+  });
+});
+
+function runCommands(...commands: [string, string][]): CommandOverrides {
+  let overrides: CommandOverrides = {};
+  for (const [command, message] of commands) {
+    overrides = { ...overrides, ...commandOverrides(command, message) };
+  }
+  return overrides;
+}
+
+describe('commandOverrides', () => {
+  it('keeps list choices when the timer changes, and vice versa', () => {
+    expect(
+      runCommands(
+        ['1s', 'list a, b, c'],
+        ['1s', 'timer 20/5'],
+        ['1s', 'vote many']
+      )
+    ).toEqual({
+      choices: ['a', 'b', 'c'],
+      duration: 20,
+      cooldown: 5,
+      repeat: true,
+    });
+  });
+
+  it('clears only its own keys when given no arguments', () => {
+    expect(
+      runCommands(['1s', 'list a, b'], ['1s', 'timer 20/5'], ['1s', 'timer'])
+    ).toEqual({
+      choices: ['a', 'b'],
+      duration: undefined,
+      cooldown: undefined,
+    });
+  });
+
+  it('returns {} for reset and undefined for unknown commands', () => {
+    expect(commandOverrides('1s', 'reset')).toEqual({});
+    expect(commandOverrides('1s', 'nope')).toBeUndefined();
   });
 });

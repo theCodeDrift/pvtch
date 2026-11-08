@@ -110,17 +110,24 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
 
   const grantError = url.searchParams.get('grant_error');
-  return data({
-    state: 'ready' as const,
-    enabled: handler.enabled,
-    subscriptionStatus: subscription?.status ?? undefined,
-    language: settings.language ?? '',
-    botLogin: TWITCH_SENDERS[LINGUAL_SENDER].login,
-    justEnabled: url.searchParams.get('enabled') === '1',
-    grantError: grantError
-      ? (GRANT_ERRORS[grantError] ?? `Twitch returned: ${grantError}`)
-      : undefined,
-  });
+  // A failed grant ends the pending enable; drop its cookie.
+  const headers = grantError
+    ? { 'Set-Cookie': clearLingualEnableCookie(env) }
+    : undefined;
+  return data(
+    {
+      state: 'ready' as const,
+      enabled: handler.enabled,
+      subscriptionStatus: subscription?.status ?? undefined,
+      language: settings.language ?? '',
+      botLogin: TWITCH_SENDERS[LINGUAL_SENDER].login,
+      justEnabled: url.searchParams.get('enabled') === '1',
+      grantError: grantError
+        ? (GRANT_ERRORS[grantError] ?? `Twitch returned: ${grantError}`)
+        : undefined,
+    },
+    { headers }
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

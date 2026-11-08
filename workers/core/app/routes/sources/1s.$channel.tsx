@@ -15,6 +15,7 @@ import z from 'zod';
 import { useNoTheme } from '@/hooks/use-no-theme';
 import {
   applyVote,
+  commandOverrides,
   EMPTY_ROUND,
   isRoundOver,
   votingStateAt,
@@ -336,65 +337,16 @@ export default function TodoSource() {
         return;
       }
 
-      const args = message
-        .split(/ /g)
-        .map((s) => s.trim().toLocaleLowerCase())
-        .filter((v) => v && v.length > 0);
-      switch (command.toLocaleLowerCase() + ' ' + args[0]) {
-        case '1s timer': {
-          const options = (args[1]?.split('/') ?? [])
-            .map((v) => Number.parseInt(v, 10))
-            .filter((v) => !Number.isNaN(v));
-          const [duration, cooldown] = options;
-
-          setOverrides((last) => ({
-            ...last,
-            duration: duration && duration > 0 ? duration : undefined,
-            cooldown: cooldown && cooldown > 0 ? cooldown : undefined,
-          }));
-          resetVotes();
-          break;
-        }
-        case '1s vote': {
-          let mode: string | undefined = args[1];
-          if (mode !== 'one' && mode !== 'many') {
-            mode = undefined;
-          }
-          setOverrides((last) => ({
-            ...last,
-            repeat: mode === 'many' ? true : mode === 'one' ? false : undefined,
-          }));
-          resetVotes();
-          break;
-        }
-        case '1s list': {
-          const list = message
-            .split(/ /g)
-            .map((s) => s.trim())
-            .filter((v, index) => index !== 0 && v && v.length > 0)
-            .join(' ')
-            .split(',')
-            .map((s) => s.trim())
-            .filter((v) => v && v.length > 0);
-
-          setOverrides((last) => ({
-            ...last,
-            choices: list.length > 0 ? list : undefined,
-          }));
-          resetVotes();
-          break;
-        }
-        case '1s reset': {
-          resetVotes();
-          break;
-        }
-        default: {
-          console.error('Unknown command', {
-            command,
-            message,
-          });
-        }
+      const patch = commandOverrides(command, message);
+      if (!patch) {
+        console.error('Unknown command', {
+          command,
+          message,
+        });
+        return;
       }
+      setOverrides((last) => ({ ...last, ...patch }));
+      resetVotes();
     };
 
     const onChat: ComfyEvents['chat'] = (user, message, _flags, _extra) => {

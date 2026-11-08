@@ -115,17 +115,26 @@ describe('board plugin: optimistic concurrency', () => {
       board.save(created.slotId, created.editKey, 'bob', 0, 'BobB'),
     ]);
 
-    expect(first).toEqual({ version: 1 });
-    expect(second).toEqual({
+    // Either save may finish its hash first; exactly one wins.
+    const results = [
+      { result: first, content: 'alice', editor: 'AliceA' },
+      { result: second, content: 'bob', editor: 'BobB' },
+    ];
+    const winners = results.filter(({ result }) => !('error' in result));
+    expect(winners).toHaveLength(1);
+    const [winner] = winners;
+    const loser = results.find((entry) => entry !== winner);
+    expect(winner.result).toEqual({ version: 1 });
+    expect(loser?.result).toEqual({
       error: 'conflict',
-      currentContent: 'alice',
+      currentContent: winner.content,
       currentVersion: 1,
     });
 
-    expect(board.read(created.slotId)?.content).toBe('alice');
+    expect(board.read(created.slotId)?.content).toBe(winner.content);
     const history = board.getHistory(created.slotId, created.editKey);
     if ('error' in history) throw new Error('history error');
-    expect(history.map((entry) => entry.editorName)).toEqual(['AliceA']);
+    expect(history.map((entry) => entry.editorName)).toEqual([winner.editor]);
   });
 });
 
