@@ -8,6 +8,7 @@
     "vitest": "^4.0.18"
   },
   "exports": {
+    "./dead-letter": "./src/dead-letter.ts",
     "./known-bots": "./src/known-bots.ts",
     "./languages": "./src/languages.ts",
     "./queue-outcome": "./src/queue-outcome.ts",

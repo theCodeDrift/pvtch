@@ -95,6 +95,12 @@
         "max_concurrency": 10,
         "dead_letter_queue": "lingual-events-dlq",
       },
+      // Logs each message that exhausted its retries above, then acks it.
+      {
+        "queue": "lingual-events-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+      },
     ],
   },
 }
