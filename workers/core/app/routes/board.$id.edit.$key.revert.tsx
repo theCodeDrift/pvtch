@@ -62,12 +62,11 @@ export async function action({ params, request, context }: Route.ActionArgs) {
     return data({ error: 'not_found' as const }, { status: 404 });
   }
 
-  // Re-read so the client can replace its local textarea state with the
-  // content that was just restored from history.
-  const updated = await boardPlugin.read(parsed.slotId);
+  // revert() returns the version it wrote together with the restored
+  // content, so the client never pairs a version with someone else's edit.
   return data({
     ok: true as const,
     version: result.version,
-    content: updated?.content ?? '',
+    content: result.content,
   });
 }

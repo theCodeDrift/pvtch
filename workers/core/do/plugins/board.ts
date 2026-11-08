@@ -86,6 +86,11 @@ export interface BoardSaveSuccess {
   version: number;
 }
 
+export interface BoardRevertSuccess {
+  version: number;
+  content: string;
+}
+
 export interface PresenceEntry {
   sessionId: string;
   name: string;
@@ -284,18 +289,35 @@ export class Board extends RpcTarget {
     const normalizedName = normalizeEditorName(editorName);
     const hash = await hashContent(content);
 
+    // The UPDATE is the compare-and-set: it only applies while the row is
+    // still at baseVersion, so a save that raced past the check above (the
+    // await on hashContent lets other requests in) can't overwrite it.
     // The DO input/output gates make these three writes atomic relative to
     // external observers: if any throws, the request fails and partial state
     // is not observable. The history trim uses (ts DESC, id DESC) so two
     // saves sharing the same millisecond produce deterministic ordering —
     // newer inserts (higher autoincrement id) are kept.
-    this.sql.exec(
-      `UPDATE boards SET content = ?, version = ?, updated_at = ? WHERE slot_id = ?`,
-      content,
-      newVersion,
-      now,
-      slotId
-    );
+    const updated = this.sql
+      .exec(
+        `UPDATE boards SET content = ?, version = ?, updated_at = ?
+           WHERE slot_id = ? AND version = ?
+           RETURNING version`,
+        content,
+        newVersion,
+        now,
+        slotId,
+        baseVersion
+      )
+      .toArray();
+    if (updated.length === 0) {
+      const current = this.getRow(slotId);
+      if (!current) return { error: 'not_found' };
+      return {
+        error: 'conflict',
+        currentContent: current.content,
+        currentVersion: current.version,
+      };
+    }
     this.sql.exec(
       `INSERT INTO board_history (slot_id, ts, editor_name, content_hash, content)
          VALUES (?, ?, ?, ?, ?)`,
@@ -327,7 +349,7 @@ export class Board extends RpcTarget {
     historyId: number,
     baseVersion: number,
     editorName: string
-  ): Promise<BoardSaveSuccess | BoardError> {
+  ): Promise<BoardRevertSuccess | BoardError> {
     const row = this.getRow(slotId);
     if (!row) return { error: 'not_found' };
     if (row.edit_key !== editKey) return { error: 'forbidden' };
@@ -344,7 +366,15 @@ export class Board extends RpcTarget {
 
     const normalizedName = normalizeEditorName(editorName);
     const revertName = `${normalizedName} (reverted)`;
-    return this.save(slotId, editKey, entry.content, baseVersion, revertName);
+    const saved = await this.save(
+      slotId,
+      editKey,
+      entry.content,
+      baseVersion,
+      revertName
+    );
+    if ('error' in saved) return saved;
+    return { version: saved.version, content: entry.content };
   }
 
   delete(slotId: string): { ok: boolean } {

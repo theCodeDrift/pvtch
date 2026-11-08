@@ -103,6 +103,30 @@ describe('board plugin: optimistic concurrency', () => {
       expect(result.currentContent).toBe('first');
     }
   });
+
+  it('lets only one of two interleaved saves on the same baseVersion win', async () => {
+    const created = board.create();
+    if ('error' in created) throw new Error('create failed');
+
+    // Both saves pass the version check before either reaches the UPDATE,
+    // because save awaits the content hash in between.
+    const [first, second] = await Promise.all([
+      board.save(created.slotId, created.editKey, 'alice', 0, 'AliceA'),
+      board.save(created.slotId, created.editKey, 'bob', 0, 'BobB'),
+    ]);
+
+    expect(first).toEqual({ version: 1 });
+    expect(second).toEqual({
+      error: 'conflict',
+      currentContent: 'alice',
+      currentVersion: 1,
+    });
+
+    expect(board.read(created.slotId)?.content).toBe('alice');
+    const history = board.getHistory(created.slotId, created.editKey);
+    if ('error' in history) throw new Error('history error');
+    expect(history.map((entry) => entry.editorName)).toEqual(['AliceA']);
+  });
 });
 
 describe('board plugin: edit key check', () => {
@@ -175,7 +199,7 @@ describe('board plugin: history and revert', () => {
       3,
       'A'
     );
-    expect('error' in revertResult).toBe(false);
+    expect(revertResult).toEqual({ version: 4, content: 'v1' });
 
     const historyAfter = board.getHistory(created.slotId, created.editKey);
     if ('error' in historyAfter) throw new Error('history error');

@@ -19,7 +19,14 @@ import {
   instanceAccessContext,
   userContext,
 } from '@/context';
-import { canUseLingual, LINGUAL_SCOPE } from '@/lib/lingual';
+import {
+  canUseLingual,
+  clearLingualEnableCookie,
+  hasPendingEnable,
+  LINGUAL_SCOPE,
+  lingualEnableCookie,
+  lingualGrantUrl,
+} from '@/lib/lingual';
 import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/twitch-data';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
@@ -68,11 +75,6 @@ function formField(formData: FormData, name: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-const GRANT_URL = `/auth/grant?${new URLSearchParams({
-  scopes: LINGUAL_SCOPE,
-  return_to: '/bots/lingual?enable=1',
-}).toString()}`;
-
 export async function loader({ request, context }: Route.LoaderArgs) {
   const access = context.get(instanceAccessContext);
   if (access?.isPrivate && !access?.isAllowed) {
@@ -90,13 +92,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const channel = channelStub(env, user.id);
 
-  // Back from /auth/grant: enable now that the scope is recorded.
-  if (
-    url.searchParams.get('enable') === '1' &&
-    (await hasLingualScope(env, user.id))
-  ) {
+  // Back from /auth/grant: enable now that the scope is recorded, but only
+  // for the grant this browser started (see lingualEnableCookie). The
+  // cookie is cleared so revisiting the URL does nothing.
+  if (hasPendingEnable(request) && (await hasLingualScope(env, user.id))) {
     await channel.enableHandler('lingual');
-    return redirect('/bots/lingual?enabled=1');
+    return redirect('/bots/lingual?enabled=1', {
+      headers: { 'Set-Cookie': clearLingualEnableCookie(env) },
+    });
   }
 
   using lingual = await channel.lingual();
@@ -132,7 +135,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   const channel = channelStub(env, user.id);
 
   if (intent === 'enable') {
-    if (!(await hasLingualScope(env, user.id))) return redirect(GRANT_URL);
+    if (!(await hasLingualScope(env, user.id))) {
+      const nonce = crypto.randomUUID();
+      return redirect(lingualGrantUrl(nonce), {
+        headers: { 'Set-Cookie': lingualEnableCookie(env, nonce) },
+      });
+    }
     await channel.enableHandler('lingual');
     return data({ ok: 'enabled' as const });
   }
