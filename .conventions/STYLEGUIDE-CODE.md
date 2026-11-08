@@ -157,9 +157,9 @@ which emits `DurableObjectNamespace<import("../storage/src/index").TwitchChannel
 **Rules:**
 
 - Every DO class exported from `workers/storage/src/index.ts` gets an `Expect<AssertRPCSerializable<Class>>` assertion there. The type check can't see plain class instances (they look stubbable), so never return one from an RPC method; return plain objects.
-- `workers/storage` deploys before its binders. The GitHub deploy workflow handles this (storage is phase 1).
+- `workers/storage` deploys before its binders. The GitHub deploy workflow handles this (storage is phase 1, core phase 2, everything else phase 3).
 - Removing a DO class takes two releases: binders drop the binding first, then storage deletes the class. See `workers/storage/wrangler.jsonc`.
-- The existing `User` and `PvtchBackend` DOs still live in `workers/core` and are bound only there.
+- The existing `User` and `PvtchBackend` DOs still live in `workers/core`. `PvtchBackend` is bound only there. `User` is also bound from `workers/twitch` (`script_name: "pvtch"`), one deliberate exception, so a Twitch revoke clears scopes through the account writer instead of writing KV. `wrangler types` can only type it against core's entry module, which pulls in the React Router app and core's `Env`, so the binder leaves it out of `cf-typegen` and narrows the binding once, in `workers/twitch/src/account.ts`, to the real class via `import type { User } from '../../core/do/user'`. Code that `User` imports must stay free of `@/` aliases and core-only `Env` fields, or pvtch-twitch stops type-checking. Don't add new cross-worker DOs to core; put them in storage.
 
 ## Code Quality Checks
 

@@ -1,7 +1,7 @@
 import { redirect } from 'react-router';
 import type { Route } from './+types/callback';
 import { cloudflareEnvironmentContext } from '@/context';
-import type { TwitchUserData } from '@/lib/twitch-data';
+import type { TwitchUserData } from '@/lib/account-record';
 import { createToken } from '@/lib/create-token';
 import {
   LOGIN_STATE_COOKIE,

@@ -7,7 +7,7 @@ import {
   startGrant,
 } from '../../app/lib/scope-grant';
 import { loader as loginLoader } from '../../app/routes/auth/start';
-import type { TwitchUserData } from '../../app/lib/twitch-data';
+import type { TwitchUserData } from '../../app/lib/account-record';
 import { type FakeKV, signedIn } from './fake-kv';
 import { fakeUserNamespace } from './fake-user-namespace';
 

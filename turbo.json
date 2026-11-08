@@ -14,7 +14,7 @@
     },
     // No `^deploy`: that would redeploy storage on every binder change and
     // couple a binder's deploy to it. Storage-first ordering is the deploy
-    // workflow's job (two phases), not a task dependency.
+    // workflow's job (storage, then core, then the rest), not a task dependency.
     "deploy": {
       "dependsOn": ["typecheck", "lint", "test"],
       "cache": false,

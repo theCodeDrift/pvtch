@@ -3,11 +3,8 @@ import { useLoaderData, useRevalidator, data, redirect } from 'react-router';
 import z from 'zod';
 import type { Route } from './+types/progress.$token.$name';
 import { cloudflareEnvironmentContext } from '@/context';
-import {
-  isValidToken,
-  twitchDataKeyPrefix,
-  type TwitchUserData,
-} from '@/lib/twitch-data';
+import { twitchDataKeyPrefix, type TwitchUserData } from '@/lib/account-record';
+import { isValidToken } from '@/lib/twitch-data';
 import { BasicBar } from '@/components/progress-bar';
 
 const POLL_INTERVAL = 3000; // ms

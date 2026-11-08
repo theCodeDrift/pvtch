@@ -53,7 +53,7 @@ For local development, follow `.dev.vars.example` to put both secrets in Wrangle
 
 ## Deploy order
 
-`.github/workflows/deploy.yml` deploys `pvtch-storage` first, then the other changed workers. This worker binds `TwitchChannel` from `pvtch-storage`, so storage must already exist, and `pvtch-storage` produces to `twitch-events`, so the queues must exist before it deploys. This worker also produces to every handler queue, so those must exist too.
+`.github/workflows/deploy.yml` deploys `pvtch-storage` first, then `pvtch` (core), then the other changed workers. This worker binds `TwitchChannel` from `pvtch-storage` and core's `User` DO (`PVTCH_USER`, the account writer it clears scopes through on a revoke) from `pvtch`, so both must already exist, and `pvtch-storage` produces to `twitch-events`, so the queues must exist before it deploys. This worker also produces to every handler queue, so those must exist too.
 
 ## Local testing
 
