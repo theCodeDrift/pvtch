@@ -95,7 +95,16 @@ export async function handleLingualEvent(
   const settings = await lingual.getSettings();
   if (!settings.language) return ack;
 
-  if (now - message.timestamp > MAX_REPLY_AGE_MS) return ack;
+  const key = await messageKey(event.message.fragments);
+
+  if (now - message.timestamp > MAX_REPLY_AGE_MS) {
+    // A retry that Queues delivered later than planned: this message set the
+    // mark and will never reply, so free it as when giving up below.
+    if (key && delivery.attempts > 1) {
+      await releaseSeen(channel, key, delivery.id);
+    }
+    return ack;
+  }
 
   // A repeated message is translated once: raids and copypasta would
   // otherwise fill chat with the same reply. As with the claim above, a retry
@@ -103,7 +112,6 @@ export async function handleLingualEvent(
   // concurrent repeats from all reaching the model; if the translation fails,
   // this message keeps the mark and retries, so the burst still gets its one
   // reply. The mark is this queue message's, so only it can release it.
-  const key = await messageKey(event.message.fragments);
   if (key && delivery.attempts === 1) {
     using cache = await channel.messageCache();
     if (!(await cache.firstSeen(key, delivery.id))) return ack;

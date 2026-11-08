@@ -382,6 +382,31 @@ describe('handleLingualEvent', () => {
       );
     });
 
+    it('lets a repeat translate after a retry delivered too late', async () => {
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-1' }),
+        delivery(1, 'q-1')
+      );
+      vi.setSystemTime(NOW + 61_000);
+      const late = await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-1', timestamp: NOW }),
+        delivery(2, 'q-1')
+      );
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(chatEvent(), { messageId: 'm-2' }),
+        delivery(1, 'q-2')
+      );
+
+      expect(late).toEqual({ type: 'ack' });
+      expect(t.send).toHaveBeenCalledOnce();
+      expect(t.send).toHaveBeenCalledWith(
+        expect.objectContaining({ sendId: 'lingual:m-2' })
+      );
+    });
+
     it('keeps a mark another queue message set', async () => {
       t.ai.mockRejectedValue(new Error('AI down'));
       const key = await messageKey(chatEvent().message.fragments);
