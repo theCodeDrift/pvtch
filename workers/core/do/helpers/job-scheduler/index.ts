@@ -31,6 +31,12 @@ export const JOB_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * How long a job may stay `running` before processAlarm() treats its handler
  * as lost (evicted or redeployed mid-await) and fails it. A DO alarm handler
  * gets at most 15 minutes of wall time, so a live handler never outlasts it.
+ *
+ * Recovery happens inside processAlarm(), so it needs the alarm to fire after
+ * the lease runs out. syncAlarm() arms it for the earliest lease expiry
+ * whenever it runs; when the DO is evicted mid-handler before that, Cloudflare
+ * redelivers the interrupted alarm (alarms are at-least-once), and that
+ * invocation's syncAlarm() arms it.
  */
 export const JOB_LEASE_MS = 15 * 60 * 1000;
 
@@ -117,8 +123,8 @@ export class JobScheduler {
   }
 
   /**
-   * Called from the DO's alarm() handler. Recovers jobs whose lease expired,
-   * then processes all due jobs and invokes host.scheduled() for each.
+   * Called from the DO's alarm() handler. Fails jobs whose lease expired,
+   * processes all due jobs and invokes host.scheduled() for each.
    *
    * This method never throws. Individual job failures are caught,
    * recorded via last_error on the job row, and retried with exponential
@@ -127,8 +133,6 @@ export class JobScheduler {
    */
   async processAlarm(host: JobSchedulerHost): Promise<void> {
     const now = Date.now();
-    this.recoverExpiredLeases(now);
-
     const dueJobs = this.sql
       .exec(
         `SELECT id, task, payload, attempt, max_retries, backoff_base_seconds, idempotency_key
@@ -138,6 +142,11 @@ export class JobScheduler {
         now
       )
       .toArray() as unknown as JobRow[];
+
+    // Recover after selecting due jobs, so a recovered retry waits for the
+    // next alarm (set by syncAlarm below) like any other retry, even with a
+    // zero backoff.
+    this.recoverExpiredLeases(now);
 
     for (const job of dueJobs) {
       this.sql.exec(

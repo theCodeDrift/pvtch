@@ -503,9 +503,62 @@ describe('JobScheduler', () => {
         expect.arrayContaining(['completed', 'pending'])
       );
     });
+    it('keeps going when recording a failure itself fails', async () => {
+      scheduler.schedule(new Date(Date.now() - 1000), 'flaky', {});
+      scheduler.schedule(0, 'other', {});
+      handler.mockImplementation((job) =>
+        job.task === 'flaky'
+          ? Promise.reject(new Error('queue down'))
+          : Promise.resolve()
+      );
+      const exec = sql.exec.bind(sql);
+      const execSpy = vi
+        .spyOn(sql, 'exec')
+        .mockImplementation((query: string, ...bindings: unknown[]) => {
+          if (query.includes("SET status = 'pending', scheduled_at")) {
+            throw new Error('disk full');
+          }
+          return exec(query, ...bindings);
+        });
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      await expect(scheduler.processAlarm()).resolves.toBeUndefined();
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ task: 'other' })
+      );
+      expect(consoleError).toHaveBeenCalled();
+      // The row stays running; the lease recovers it once bookkeeping works.
+      expect(getJobs().find((job) => job.task === 'flaky')?.status).toBe(
+        'running'
+      );
+
+      execSpy.mockRestore();
+      consoleError.mockRestore();
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+      await scheduler.processAlarm();
+
+      expect(getJobs().find((job) => job.task === 'flaky')).toMatchObject({
+        status: 'pending',
+        attempt: 1,
+      });
+    });
   });
 
   describe('expired leases', () => {
+    it('defers a recovered retry to the next alarm, even with zero backoff', async () => {
+      scheduler.schedule(0, 'sync', {}, { backoffBaseSeconds: 0 });
+      markRunning(Date.now());
+      vi.setSystemTime(new Date(Date.now() + JOB_LEASE_MS));
+
+      await scheduler.processAlarm();
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(getJobs()[0]).toMatchObject({ status: 'pending', attempt: 1 });
+    });
+
     it('retries a one-shot left running past the lease', async () => {
       scheduler.schedule(0, 'sync', {}, { key: 'sync' });
       markRunning(Date.now());
