@@ -125,8 +125,8 @@ export class Account {
       if (current && !('scopes' in current) && sameOwned(current, owned)) {
         account = current;
       } else {
-        const { scopes: _cleared, ...rest } = current ?? {};
-        account = await this.publish(owned, { ...owned, ...rest });
+        const { scopes: _cleared, ...rest }: TwitchUserData = current ?? owned;
+        account = await this.publish(owned, rest);
       }
       await this.revokePending();
       return account;
