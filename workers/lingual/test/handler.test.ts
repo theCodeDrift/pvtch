@@ -21,6 +21,11 @@ vi.mock('../src/lingo/pipeline-v2');
 
 const NOW = new Date('2026-10-23T12:00:00.000Z').getTime();
 
+/** One queue message: `id` stays the same across its retries. */
+function delivery(attempts: number, id = 'q-1') {
+  return { id, attempts };
+}
+
 describe('handleLingualEvent', () => {
   let t: TestEnv;
 
@@ -45,7 +50,11 @@ describe('handleLingualEvent', () => {
   });
 
   it('requests a threaded reply as its sender', async () => {
-    const outcome = await handleLingualEvent(t.env, handlerEvent(), 1);
+    const outcome = await handleLingualEvent(
+      t.env,
+      handlerEvent(),
+      delivery(1)
+    );
 
     expect(outcome).toEqual({ type: 'ack' });
     expect(t.send).toHaveBeenCalledOnce();
@@ -65,7 +74,7 @@ describe('handleLingualEvent', () => {
     await handleLingualEvent(
       t.env,
       handlerEvent(chatEvent(), { flags: [NO_THREAD_FLAG] }),
-      1
+      delivery(1)
     );
 
     expect(t.send).toHaveBeenCalledWith(
@@ -83,7 +92,7 @@ describe('handleLingualEvent', () => {
     await handleLingualEvent(
       t.env,
       handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
-      1
+      delivery(1)
     );
 
     expect(t.ai).not.toHaveBeenCalled();
@@ -93,8 +102,8 @@ describe('handleLingualEvent', () => {
   });
 
   it('acts once when the same fan-out arrives twice', async () => {
-    await handleLingualEvent(t.env, handlerEvent(), 1);
-    await handleLingualEvent(t.env, handlerEvent(), 1);
+    await handleLingualEvent(t.env, handlerEvent(), delivery(1, 'q-1'));
+    await handleLingualEvent(t.env, handlerEvent(), delivery(1, 'q-2'));
 
     expect(t.ai).toHaveBeenCalledOnce();
     expect(t.send).toHaveBeenCalledOnce();
@@ -104,12 +113,12 @@ describe('handleLingualEvent', () => {
     await handleLingualEvent(
       t.env,
       handlerEvent(chatEvent(), { messageId: 'm-1' }),
-      1
+      delivery(1)
     );
     await handleLingualEvent(
       t.env,
       handlerEvent(chatEvent(), { messageId: 'm-2' }),
-      1
+      delivery(1)
     );
 
     expect(t.ai).toHaveBeenCalledOnce();
@@ -117,18 +126,42 @@ describe('handleLingualEvent', () => {
   });
 
   it('does not count its own retry as a repeat', async () => {
-    await handleLingualEvent(t.env, handlerEvent(), 1);
-    await handleLingualEvent(t.env, handlerEvent(), 2);
+    await handleLingualEvent(t.env, handlerEvent(), delivery(1));
+    await handleLingualEvent(t.env, handlerEvent(), delivery(2));
 
     expect(t.send).toHaveBeenCalledTimes(2);
   });
 
-  it('does not claim again on its own retry', async () => {
-    t.channel(BROADCASTER_ID).claimed.add('lingual:m-1');
+  it('keeps its claim on its own retry', async () => {
+    t.channel(BROADCASTER_ID).claimed.set('lingual:m-1', 'q-1');
 
-    await handleLingualEvent(t.env, handlerEvent(), 2);
+    await handleLingualEvent(t.env, handlerEvent(), delivery(2));
 
     expect(t.send).toHaveBeenCalledOnce();
+  });
+
+  it('drops a copy claimed by another queue message', async () => {
+    t.channel(BROADCASTER_ID).claimed.set('lingual:m-1', 'q-other');
+
+    await handleLingualEvent(t.env, handlerEvent(), delivery(2));
+
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it('finishes the work after a crash past the claim', async () => {
+    t.send.mockRejectedValueOnce(new Error('queue down'));
+    await expect(
+      handleLingualEvent(t.env, handlerEvent(), delivery(1))
+    ).rejects.toThrow('queue down');
+
+    const outcome = await handleLingualEvent(
+      t.env,
+      handlerEvent(),
+      delivery(2)
+    );
+
+    expect(outcome).toEqual({ type: 'ack' });
+    expect(t.send).toHaveBeenCalledTimes(2);
   });
 
   describe('skips without translating', () => {
@@ -136,7 +169,7 @@ describe('handleLingualEvent', () => {
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent({ source_broadcaster_user_id: '999' })),
-        1
+        delivery(1)
       );
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -152,7 +185,7 @@ describe('handleLingualEvent', () => {
             },
           })
         ),
-        1
+        delivery(1)
       );
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -161,7 +194,7 @@ describe('handleLingualEvent', () => {
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent({ chatter_user_login: 'Nightbot' })),
-        1
+        delivery(1)
       );
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -169,7 +202,7 @@ describe('handleLingualEvent', () => {
     it('a channel with no Lingual language set', async () => {
       // eslint-disable-next-line unicorn/no-null -- RPC returns null
       t.channel(BROADCASTER_ID).settings.language = null;
-      await handleLingualEvent(t.env, handlerEvent(), 1);
+      await handleLingualEvent(t.env, handlerEvent(), delivery(1));
       expect(t.ai).not.toHaveBeenCalled();
     });
 
@@ -177,7 +210,7 @@ describe('handleLingualEvent', () => {
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { timestamp: NOW - 61_000 }),
-        1
+        delivery(1)
       );
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -186,7 +219,7 @@ describe('handleLingualEvent', () => {
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { subscriptionType: 'channel.follow' }),
-        1
+        delivery(1)
       );
       expect(t.ai).not.toHaveBeenCalled();
     });
@@ -197,7 +230,11 @@ describe('handleLingualEvent', () => {
       aiResponse({ detected: 'Spanish', detectedCode: 'spa', translation: '' })
     );
 
-    const outcome = await handleLingualEvent(t.env, handlerEvent(), 1);
+    const outcome = await handleLingualEvent(
+      t.env,
+      handlerEvent(),
+      delivery(1)
+    );
 
     expect(outcome).toEqual({ type: 'ack' });
     expect(t.send).not.toHaveBeenCalled();
@@ -211,7 +248,11 @@ describe('handleLingualEvent', () => {
     });
 
     it('retries after a short delay', async () => {
-      const outcome = await handleLingualEvent(t.env, handlerEvent(), 1);
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(),
+        delivery(1)
+      );
 
       expect(outcome).toEqual({
         type: 'retry',
@@ -221,10 +262,14 @@ describe('handleLingualEvent', () => {
     });
 
     it('posts the reply from its retry', async () => {
-      await handleLingualEvent(t.env, handlerEvent(), 1);
+      await handleLingualEvent(t.env, handlerEvent(), delivery(1));
       vi.setSystemTime(NOW + RETRY_DELAY_SECONDS * 1000);
 
-      const outcome = await handleLingualEvent(t.env, handlerEvent(), 2);
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(),
+        delivery(2)
+      );
 
       expect(outcome).toEqual({ type: 'ack' });
       expect(t.send).toHaveBeenCalledOnce();
@@ -236,7 +281,7 @@ describe('handleLingualEvent', () => {
       const outcome = await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
-        1
+        delivery(1)
       );
 
       expect(outcome).toMatchObject({ type: 'retry' });
@@ -246,17 +291,17 @@ describe('handleLingualEvent', () => {
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { messageId: 'm-1' }),
-        1
+        delivery(1)
       );
       const repeat = await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { messageId: 'm-2' }),
-        1
+        delivery(1)
       );
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { messageId: 'm-1' }),
-        2
+        delivery(2)
       );
 
       expect(repeat).toEqual({ type: 'ack' });
@@ -271,7 +316,7 @@ describe('handleLingualEvent', () => {
       const outcome = await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { timestamp: NOW - 56_000 }),
-        1
+        delivery(1)
       );
 
       expect(outcome).toEqual({ type: 'ack' });
@@ -281,6 +326,7 @@ describe('handleLingualEvent', () => {
 
 function batch(body: unknown) {
   const message = {
+    id: 'q-1',
     body,
     attempts: 1,
     ack: vi.fn(),

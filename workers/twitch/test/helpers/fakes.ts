@@ -34,7 +34,9 @@ export class FakeChannel {
   tiers = new Map<SenderId, 'standard' | 'moderator'>();
   /** What `acquireSendSlot` returns once a claim passes. */
   slot: Slot = { ok: true };
-  claimed = new Set<string>();
+  /** Claimed keys and their owners. */
+  claimed = new Map<string, string | undefined>();
+  done = new Set<string>();
   flagSet = new Set<string>();
   lingualSettings: { language: string | null } = {
     language: null,
@@ -147,17 +149,24 @@ export class FakeChannel {
       this.syncRequests.push(senderId);
     return cleared;
   }
-  claim(key: string) {
-    if (this.claimed.has(key)) return false;
-    this.claimed.add(key);
+  /** Same rules as TwitchChannel.claim: the owner may claim again until
+   * the claim is done; anyone else (or no owner) may not. */
+  claim(key: string, owner?: string) {
+    if (this.claimed.has(key)) {
+      const held = this.claimed.get(key);
+      return owner !== undefined && held === owner && !this.done.has(key);
+    }
+    this.claimed.set(key, owner);
     return true;
   }
   routeEvent(input: {
     messageId: string | null;
+    owner?: string;
     subscriptionType: string;
     senderId: SenderId | null;
   }) {
-    const fresh = input.messageId === null || this.claim(input.messageId);
+    const fresh =
+      input.messageId === null || this.claim(input.messageId, input.owner);
     if (!fresh) return { fresh, handlers: [], flags: [] };
     const handlers = CHANNEL_EVENT_TYPES.includes(input.subscriptionType)
       ? this.listHandlers()
@@ -170,11 +179,18 @@ export class FakeChannel {
         );
     return { fresh, handlers, flags: [...this.flagSet] };
   }
-  acquireSendSlot(_senderId: SenderId, claimKey: string | null): Slot {
-    if (claimKey !== null && !this.claim(claimKey)) {
+  acquireSendSlot(
+    _senderId: SenderId,
+    claimKey: string | null,
+    owner?: string
+  ): Slot {
+    if (claimKey !== null && !this.claim(claimKey, owner)) {
       return { ok: false, duplicate: true };
     }
     return this.slot;
+  }
+  completeClaim(key: string, owner: string) {
+    if (this.claimed.get(key) === owner) this.done.add(key);
   }
   getSendTier(senderId: SenderId) {
     return this.tiers.get(senderId) ?? 'standard';

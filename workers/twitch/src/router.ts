@@ -34,28 +34,25 @@ const SENDER_USER_IDS = new Set<string>(
   SENDER_IDS.map((id) => TWITCH_SENDERS[id].userId)
 );
 
-/** Claim on the first attempt only, so our own retries aren't duplicates. */
-function claimKey(message: TwitchEventMessage, attempts: number) {
-  // eslint-disable-next-line unicorn/no-null -- RPC: null means "don't claim"
-  return attempts === 1 ? message.messageId : null;
-}
-
 /**
  * Route one EventSub notification:
  * 1. Does pvtch track this event type at all?
  * 2. Which channel (and, for handler types, which sender) is it for?
- * 3. Does it matter to that channel? `routeEvent` claims the message and
- *    returns the enabled handlers plus the channel's flags.
+ * 3. Does it matter to that channel? `routeEvent` claims the message for
+ *    this queue message (`owner`) and returns the enabled handlers plus the
+ *    channel's flags.
  * 4. Fan out: one message per handler on its own queue. Channel-level types
  *    run here instead.
  *
- * A failed fan-out throws, so the message retries without claiming; handlers
- * claim `<handlerId>:<messageId>` themselves and absorb the repeat.
+ * Every attempt claims. A retry of the same queue message owns the claim and
+ * routes again; a Twitch redelivery is a new queue message and is dropped.
+ * A failed fan-out throws and retries; handlers claim
+ * `<handlerId>:<messageId>` themselves and absorb the repeat.
  */
 export async function routeEvent(
   env: Env,
   message: TwitchEventMessage,
-  attempts: number
+  owner: string
 ): Promise<Outcome> {
   if (!isTrackedEventType(message.subscriptionType)) {
     console.warn('Untracked EventSub type', {
@@ -67,7 +64,8 @@ export async function routeEvent(
   if (message.subscriptionType === AUTHORIZATION_REVOKE_TYPE) {
     const event = authorizationRevokeEvent.parse(message.event);
     const route = await channelStub(env, event.user_id).routeEvent({
-      messageId: claimKey(message, attempts),
+      messageId: message.messageId,
+      owner,
       subscriptionType: message.subscriptionType,
       // eslint-disable-next-line unicorn/no-null -- channel-level type
       senderId: null,
@@ -98,7 +96,8 @@ export async function routeEvent(
   }
 
   const route = await channel.routeEvent({
-    messageId: claimKey(message, attempts),
+    messageId: message.messageId,
+    owner,
     subscriptionType: message.subscriptionType,
     senderId,
   });

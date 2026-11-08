@@ -19,11 +19,7 @@ export async function consume(batch: MessageBatch, env: Env): Promise<void> {
         message.ack();
         continue;
       }
-      const outcome = await handleLingualEvent(
-        env,
-        parsed.data,
-        message.attempts
-      );
+      const outcome = await handleLingualEvent(env, parsed.data, message);
       if (outcome.type === 'retry') {
         message.retry({ delaySeconds: outcome.delaySeconds });
       } else {

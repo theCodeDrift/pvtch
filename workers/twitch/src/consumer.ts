@@ -8,7 +8,8 @@ import { sync } from './twitch/subscriptions';
 export async function handleQueueMessage(
   env: Env,
   body: unknown,
-  attempts: number
+  /** The queue message id: stable across retries, so it owns claims. */
+  owner: string
 ): Promise<Outcome> {
   const parsed = twitchQueueMessage.safeParse(body);
   if (!parsed.success) {
@@ -18,13 +19,13 @@ export async function handleQueueMessage(
   const message = parsed.data;
   switch (message.kind) {
     case 'event': {
-      return routeEvent(env, message, attempts);
+      return routeEvent(env, message, owner);
     }
     case 'sync': {
       return sync(env, message.broadcasterId, message.senderId);
     }
     case 'send': {
-      return handleSend(env, message, attempts);
+      return handleSend(env, message, owner);
     }
   }
 }
@@ -33,11 +34,7 @@ export async function handleQueueMessage(
 export async function consume(batch: MessageBatch, env: Env): Promise<void> {
   for (const message of batch.messages) {
     try {
-      const outcome = await handleQueueMessage(
-        env,
-        message.body,
-        message.attempts
-      );
+      const outcome = await handleQueueMessage(env, message.body, message.id);
       if (outcome.type === 'retry') {
         message.retry({ delaySeconds: outcome.delaySeconds });
       } else {

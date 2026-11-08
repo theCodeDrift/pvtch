@@ -5,6 +5,8 @@ import {
   DEDUPE_WINDOW_MS,
   RECONCILE_CRON,
 } from '../src/durable-objects/twitch-channel';
+import { twitchChannelMigrations } from '../src/durable-objects/twitch-channel/migrations';
+import { migrate } from '../src/helpers/migrate';
 import { createWorkerdSql } from './helpers/workerd-sql';
 
 const CHAT = 'channel.chat.message';
@@ -456,6 +458,75 @@ describe('TwitchChannel', () => {
       expect(channel.claim('m1')).toBe(true);
     });
 
+    it('keeps claims taken before owners existed', () => {
+      sql = createWorkerdSql();
+      migrate(
+        sql,
+        {
+          1: twitchChannelMigrations[1],
+          2: twitchChannelMigrations[2],
+          3: twitchChannelMigrations[3],
+        },
+        '_twitch_channel_version'
+      );
+      sql.exec(
+        'INSERT INTO message_claims (message_id, claimed_at) VALUES (?, ?)',
+        'm1',
+        Date.now()
+      );
+
+      channel = construct();
+
+      expect(channel.claim('m1', 'q-1')).toBe(false);
+      expect(channel.claim('m2', 'q-1')).toBe(true);
+    });
+
+    it('lets the same owner claim again, but not another owner', () => {
+      expect(channel.claim('m1', 'q-1')).toBe(true);
+
+      expect(channel.claim('m1', 'q-1')).toBe(true);
+      expect(channel.claim('m1', 'q-2')).toBe(false);
+      expect(channel.claim('m1')).toBe(false);
+    });
+
+    it('keeps an ownerless claim from every owner', () => {
+      channel.claim('m1');
+
+      expect(channel.claim('m1', 'q-1')).toBe(false);
+    });
+
+    it('keeps the first claim time when the owner claims again', () => {
+      channel.claim('m1', 'q-1');
+      vi.advanceTimersByTime(DEDUPE_WINDOW_MS - 1);
+      channel.claim('m1', 'q-1');
+      vi.advanceTimersByTime(1);
+
+      expect(channel.claim('m1', 'q-2')).toBe(true);
+    });
+
+    it('refuses its owner once the claim is done', () => {
+      channel.claim('m1', 'q-1');
+      channel.completeClaim('m1', 'q-1');
+
+      expect(channel.claim('m1', 'q-1')).toBe(false);
+    });
+
+    it('ignores completeClaim from another owner', () => {
+      channel.claim('m1', 'q-1');
+      channel.completeClaim('m1', 'q-2');
+
+      expect(channel.claim('m1', 'q-1')).toBe(true);
+    });
+
+    it('clears done when an expired claim is taken again', () => {
+      channel.claim('m1', 'q-1');
+      channel.completeClaim('m1', 'q-1');
+      vi.advanceTimersByTime(DEDUPE_WINDOW_MS);
+
+      expect(channel.claim('m1', 'q-2')).toBe(true);
+      expect(channel.claim('m1', 'q-2')).toBe(true);
+    });
+
     it('queues at most one prune job', () => {
       channel.claim('m1');
       channel.claim('m2');
@@ -527,7 +598,25 @@ describe('TwitchChannel', () => {
       });
     });
 
-    it('skips the claim on a retry', () => {
+    it('routes again for the owner after a failed first attempt', () => {
+      channel.enableHandler('lingual');
+      const route = (owner: string) =>
+        channel.routeEvent({
+          messageId: 'm1',
+          owner,
+          subscriptionType: CHAT,
+          senderId: 'pvtchbot',
+        });
+
+      expect(route('q-1').fresh).toBe(true);
+      expect(route('q-1')).toMatchObject({
+        fresh: true,
+        handlers: ['lingual'],
+      });
+      expect(route('q-2')).toMatchObject({ fresh: false, handlers: [] });
+    });
+
+    it('skips the claim without a message id (older routers)', () => {
       // eslint-disable-next-line unicorn/no-null -- retry
       expect(routeChat(channel, null).fresh).toBe(true);
       expect(
@@ -615,6 +704,30 @@ describe('TwitchChannel', () => {
         ok: false,
         duplicate: true,
       });
+    });
+
+    it("lets the owner's retry take a slot after waiting", () => {
+      drain(channel, 20);
+      expect(
+        channel.acquireSendSlot('pvtchbot', 'send:lingual:m1', 'q-1')
+      ).toMatchObject({ ok: false, retryAfterMs: 1500 });
+      vi.advanceTimersByTime(1500);
+
+      expect(
+        channel.acquireSendSlot('pvtchbot', 'send:lingual:m1', 'q-2')
+      ).toEqual({ ok: false, duplicate: true });
+      expect(
+        channel.acquireSendSlot('pvtchbot', 'send:lingual:m1', 'q-1')
+      ).toEqual({ ok: true });
+    });
+
+    it('reports a completed send as a duplicate to its owner', () => {
+      channel.acquireSendSlot('pvtchbot', 'send:lingual:m1', 'q-1');
+      channel.completeClaim('send:lingual:m1', 'q-1');
+
+      expect(
+        channel.acquireSendSlot('pvtchbot', 'send:lingual:m1', 'q-1')
+      ).toEqual({ ok: false, duplicate: true });
     });
   });
 
