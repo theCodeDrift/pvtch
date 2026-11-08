@@ -22,6 +22,7 @@ const REVERT_ERRORS = {
     'Someone else edited the board first. It has been refreshed; try the revert again.',
   forbidden: 'This edit URL was rotated. Ask the streamer for the new one.',
   not_found: 'That version or board no longer exists.',
+  too_large: `That version is too large. Limit is ${MAX_CONTENT_BYTES} bytes.`,
   bad_request: 'Invalid request. Reload the page and try again.',
 } as const;
 

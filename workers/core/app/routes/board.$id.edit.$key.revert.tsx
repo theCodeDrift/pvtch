@@ -59,6 +59,9 @@ export async function action({ params, request, context }: Route.ActionArgs) {
         { status: 409 }
       );
     }
+    if (result.error === 'too_large') {
+      return data({ error: 'too_large' as const }, { status: 413 });
+    }
     return data({ error: 'not_found' as const }, { status: 404 });
   }
 
