@@ -5,13 +5,20 @@ import { vi } from 'vitest';
 
 /** In-memory stand-in for the parts of TwitchChannel Lingual uses. */
 export class FakeChannel {
-  claimed = new Set<string>();
+  /** Claimed keys and their owners. */
+  claimed = new Map<string, string | undefined>();
+  done = new Set<string>();
   seen = new Set<string>();
   settings: { language: string | null } = { language: null };
 
-  claim(key: string) {
-    if (this.claimed.has(key)) return false;
-    this.claimed.add(key);
+  /** Same rules as TwitchChannel.claim: the owner may claim again until
+   * the claim is done; anyone else (or no owner) may not. */
+  claim(key: string, owner?: string) {
+    if (this.claimed.has(key)) {
+      const held = this.claimed.get(key);
+      return owner !== undefined && held === owner && !this.done.has(key);
+    }
+    this.claimed.set(key, owner);
     return true;
   }
   messageCache() {

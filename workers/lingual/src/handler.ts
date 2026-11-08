@@ -34,6 +34,9 @@ function channelStub(env: Env, broadcasterId: string) {
   );
 }
 
+/** The queue message being handled: its id is stable across retries. */
+export type Delivery = Pick<Message, 'id' | 'attempts'>;
+
 /**
  * Handle one routed `channel.chat.message`: decide whether Lingual should
  * translate it, translate, and request a threaded reply. pvtch-twitch has
@@ -43,7 +46,7 @@ function channelStub(env: Env, broadcasterId: string) {
 export async function handleLingualEvent(
   env: Env,
   message: HandlerEventMessage,
-  attempts: number,
+  delivery: Delivery,
   now = Date.now()
 ): Promise<Outcome> {
   if (message.subscriptionType !== CHAT_MESSAGE_TYPE) {
@@ -55,12 +58,14 @@ export async function handleLingualEvent(
 
   const channel = channelStub(env, message.broadcasterId);
 
-  // Queues deliver at least once; claim on the first attempt only so our
-  // own retries aren't mistaken for duplicates.
-  if (attempts === 1) {
-    const fresh = await channel.claim(`lingual:${message.messageId}`);
-    if (!fresh) return ack;
-  }
+  // Queues deliver at least once. Every attempt claims as this queue
+  // message, so our own retries keep the claim and a redelivered copy (a new
+  // queue message) is dropped.
+  const fresh = await channel.claim(
+    `lingual:${message.messageId}`,
+    delivery.id
+  );
+  if (!fresh) return ack;
 
   const event = chatMessageEvent.parse(message.event);
 
@@ -94,7 +99,7 @@ export async function handleLingualEvent(
   // concurrent repeats from all reaching the model; if the translation fails,
   // this message keeps the mark and retries, so the burst still gets its one
   // reply.
-  if (attempts === 1) {
+  if (delivery.attempts === 1) {
     const key = await messageKey(event.message.fragments);
     if (key) {
       using cache = await channel.messageCache();

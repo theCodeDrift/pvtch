@@ -51,7 +51,7 @@ describe('router', () => {
   it('fans a chat event out to lingual-events with the channel flags', async () => {
     t.channel(BROADCASTER_ID).flagSet.add('lingual.reply-threading');
 
-    expect(await handleQueueMessage(t.env, chatMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, chatMessage(), 'q-1')).toEqual({
       type: 'ack',
     });
 
@@ -69,26 +69,45 @@ describe('router', () => {
     });
   });
 
-  it('drops a duplicate delivery of the same EventSub message', async () => {
-    t.channel(BROADCASTER_ID).claimed.add('m-1');
+  it('drops a Twitch redelivery of the same EventSub message', async () => {
+    await handleQueueMessage(t.env, chatMessage(), 'q-1');
+    await handleQueueMessage(t.env, chatMessage(), 'q-2');
 
-    await handleQueueMessage(t.env, chatMessage(), 1);
-
-    expect(t.lingualSend).not.toHaveBeenCalled();
+    expect(t.lingualSend).toHaveBeenCalledOnce();
   });
 
-  it('fans out again on its own retry without re-claiming', async () => {
-    t.channel(BROADCASTER_ID).claimed.add('m-1');
+  it('fans out again on its own retry', async () => {
+    t.lingualSend.mockRejectedValueOnce(new Error('queue down'));
+    await expect(
+      handleQueueMessage(t.env, chatMessage(), 'q-1')
+    ).rejects.toThrow('queue down');
 
-    await handleQueueMessage(t.env, chatMessage(), 2);
+    await handleQueueMessage(t.env, chatMessage(), 'q-1');
 
+    expect(t.lingualSend).toHaveBeenCalledTimes(2);
+  });
+
+  it('claims on a retry when the first attempt failed before claiming', async () => {
+    const channel = t.channel(BROADCASTER_ID);
+    vi.spyOn(channel, 'routeEvent').mockImplementationOnce(() => {
+      throw new Error('storage down');
+    });
+    await expect(
+      handleQueueMessage(t.env, chatMessage(), 'q-1')
+    ).rejects.toThrow('storage down');
+
+    await handleQueueMessage(t.env, chatMessage(), 'q-1');
+    expect(channel.claimed.get('m-1')).toBe('q-1');
+
+    // A Twitch redelivery arriving during that retry is still a duplicate.
+    await handleQueueMessage(t.env, chatMessage(), 'q-2');
     expect(t.lingualSend).toHaveBeenCalledOnce();
   });
 
   it('sends nothing when the handler is disabled on the channel', async () => {
     t.channel(BROADCASTER_ID).disableHandler('lingual');
 
-    await handleQueueMessage(t.env, chatMessage(), 1);
+    await handleQueueMessage(t.env, chatMessage(), 'q-1');
 
     expect(t.lingualSend).not.toHaveBeenCalled();
   });
@@ -100,7 +119,7 @@ describe('router', () => {
     await handleQueueMessage(
       t.env,
       chatMessage(chatEvent(), { subscriptionType: 'channel.follow' }),
-      1
+      'q-1'
     );
 
     expect(routeEvent).not.toHaveBeenCalled();
@@ -114,7 +133,7 @@ describe('router', () => {
       chatMessage(chatEvent(), {
         condition: { broadcaster_user_id: BROADCASTER_ID, user_id: '999' },
       }),
-      1
+      'q-1'
     );
 
     expect(t.lingualSend).not.toHaveBeenCalled();
@@ -123,9 +142,9 @@ describe('router', () => {
   it('throws when the fan-out fails so the event retries', async () => {
     t.lingualSend.mockRejectedValueOnce(new Error('queue down'));
 
-    await expect(handleQueueMessage(t.env, chatMessage(), 1)).rejects.toThrow(
-      'queue down'
-    );
+    await expect(
+      handleQueueMessage(t.env, chatMessage(), 'q-1')
+    ).rejects.toThrow('queue down');
   });
 
   describe("a sender's own message", () => {
@@ -133,7 +152,7 @@ describe('router', () => {
       await handleQueueMessage(
         t.env,
         chatMessage(chatEvent({ chatter_user_id: BOT_ID })),
-        1
+        'q-1'
       );
       expect(t.lingualSend).not.toHaveBeenCalled();
     });
@@ -147,7 +166,7 @@ describe('router', () => {
             badges: [{ set_id: 'moderator', id: '1', info: '' }],
           })
         ),
-        1
+        'q-1'
       );
       expect(t.channel(BROADCASTER_ID).getSendTier('pvtchbot')).toBe(
         'moderator'
@@ -159,7 +178,7 @@ describe('router', () => {
       await handleQueueMessage(
         t.env,
         chatMessage(chatEvent({ chatter_user_id: BOT_ID, badges: [] })),
-        1
+        'q-1'
       );
       expect(t.channel(BROADCASTER_ID).getSendTier('pvtchbot')).toBe(
         'standard'
@@ -169,7 +188,7 @@ describe('router', () => {
 
   it('acks a message that is not a twitch-events message', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await handleQueueMessage(t.env, { kind: 'nope' }, 1)).toEqual({
+    expect(await handleQueueMessage(t.env, { kind: 'nope' }, 'q-1')).toEqual({
       type: 'ack',
     });
   });
@@ -194,7 +213,7 @@ describe('authorization revoke', () => {
         timestamp: Date.now(),
         event: { client_id: 'client-id', user_id: 'u-7', user_login: null },
       },
-      1
+      'q-1'
     );
 
     expect(t.channel('u-7').listHandlers()).toEqual([]);
@@ -255,7 +274,7 @@ describe('send', () => {
   it('posts a threaded reply as the sender', async () => {
     const fetchMock = mockFetch(appTokenRoute, sendRoute(sent));
 
-    expect(await handleQueueMessage(t.env, sendMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
       type: 'ack',
     });
     expect(JSON.parse(helixSends(fetchMock)[0]?.[1]?.body as string)).toEqual({
@@ -269,8 +288,8 @@ describe('send', () => {
   it('posts once when the same send arrives twice', async () => {
     const fetchMock = mockFetch(appTokenRoute, sendRoute(sent));
 
-    await handleQueueMessage(t.env, sendMessage(), 1);
-    await handleQueueMessage(t.env, sendMessage(), 1);
+    await handleQueueMessage(t.env, sendMessage(), 'q-1');
+    await handleQueueMessage(t.env, sendMessage(), 'q-2');
 
     expect(helixSends(fetchMock)).toHaveLength(1);
   });
@@ -279,20 +298,51 @@ describe('send', () => {
     t.channel(BROADCASTER_ID).slot = { ok: false, retryAfterMs: 1500 };
     const fetchMock = mockFetch(appTokenRoute);
 
-    expect(await handleQueueMessage(t.env, sendMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
       type: 'retry',
       delaySeconds: 2,
     });
     expect(helixSends(fetchMock)).toHaveLength(0);
   });
 
-  it('does not claim again on its own retry', async () => {
+  it('posts from its own retry after waiting for a slot', async () => {
     const fetchMock = mockFetch(appTokenRoute, sendRoute(sent));
-    t.channel(BROADCASTER_ID).claimed.add('send:lingual:m-1');
+    t.channel(BROADCASTER_ID).slot = { ok: false, retryAfterMs: 1500 };
+    await handleQueueMessage(t.env, sendMessage(), 'q-1');
+    t.channel(BROADCASTER_ID).slot = { ok: true };
 
-    await handleQueueMessage(t.env, sendMessage(), 2);
+    await handleQueueMessage(t.env, sendMessage(), 'q-1');
 
     expect(helixSends(fetchMock)).toHaveLength(1);
+  });
+
+  it('does not post again on a retry after Twitch accepted it', async () => {
+    const fetchMock = mockFetch(
+      appTokenRoute,
+      sendRoute(() => new Response('not json'))
+    );
+    await expect(
+      handleQueueMessage(t.env, sendMessage(), 'q-1')
+    ).rejects.toThrow();
+
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
+      type: 'ack',
+    });
+    expect(helixSends(fetchMock)).toHaveLength(1);
+  });
+
+  it('still acks when marking the send done fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockFetch(appTokenRoute, sendRoute(sent));
+    vi.spyOn(t.channel(BROADCASTER_ID), 'completeClaim').mockImplementation(
+      () => {
+        throw new Error('storage down');
+      }
+    );
+
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
+      type: 'ack',
+    });
   });
 
   it('retries after Ratelimit-Reset on a 429', async () => {
@@ -307,7 +357,7 @@ describe('send', () => {
       )
     );
 
-    expect(await handleQueueMessage(t.env, sendMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
       type: 'retry',
       delaySeconds: 5,
     });
@@ -320,7 +370,7 @@ describe('send', () => {
       sendRoute(() => new Response(undefined, { status: 403 }))
     );
 
-    expect(await handleQueueMessage(t.env, sendMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
       type: 'ack',
     });
     expect(t.channel(BROADCASTER_ID).listHandlers()).toEqual([]);
@@ -332,9 +382,9 @@ describe('send', () => {
       sendRoute(() => new Response(undefined, { status: 503 }))
     );
 
-    await expect(handleQueueMessage(t.env, sendMessage(), 1)).rejects.toThrow(
-      '503'
-    );
+    await expect(
+      handleQueueMessage(t.env, sendMessage(), 'q-1')
+    ).rejects.toThrow('503');
   });
 
   it('logs and acks a message Twitch dropped', async () => {
@@ -354,7 +404,7 @@ describe('send', () => {
       )
     );
 
-    expect(await handleQueueMessage(t.env, sendMessage(), 1)).toEqual({
+    expect(await handleQueueMessage(t.env, sendMessage(), 'q-1')).toEqual({
       type: 'ack',
     });
     expect(warn).toHaveBeenCalledWith(
@@ -369,7 +419,7 @@ describe('send', () => {
     await handleQueueMessage(
       t.env,
       sendMessage({ timestamp: NOW - 61_000 }),
-      1
+      'q-1'
     );
 
     expect(helixSends(fetchMock)).toHaveLength(0);
@@ -392,7 +442,9 @@ describe('consume', () => {
       's-1',
       'enabled'
     );
+    let next = 0;
     const make = (body: unknown) => ({
+      id: `q-${String(++next)}`,
       body,
       attempts: 1,
       ack: vi.fn(),

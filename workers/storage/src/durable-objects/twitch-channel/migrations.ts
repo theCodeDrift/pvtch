@@ -98,4 +98,10 @@ export const twitchChannelMigrations: Migrations = {
       )
     `);
   },
+  4: (sql) => {
+    // Claims remember who took them, so the same queue message can claim
+    // again on its retry, and when a send has been posted.
+    sql.exec(`ALTER TABLE message_claims ADD COLUMN owner TEXT`);
+    sql.exec(`ALTER TABLE message_claims ADD COLUMN done_at INTEGER`);
+  },
 };

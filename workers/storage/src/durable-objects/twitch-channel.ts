@@ -55,8 +55,12 @@ export type SendSlot =
   | { ok: false; duplicate: true };
 
 export interface RouteEventInput {
-  /** The EventSub message id to claim, or null on a retry */
+  /** The EventSub message id to claim. Null skips the claim (how older
+   * routers marked a retry). */
   messageId: string | null;
+  /** The claim's owner: the queue message id, stable across its retries.
+   * Omitted by older routers, whose claims nobody else can own. */
+  owner?: string;
   subscriptionType: string;
   /** The sender whose subscription delivered the event; null for
    * channel-level types */
@@ -390,26 +394,45 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
   }
 
   /**
-   * Claim a key. Returns true the first time a key is seen within the
-   * dedupe window, false for every repeat. A single statement, so
-   * concurrent callers can't both win: an expired claim is overwritten, a
-   * live one is left alone and RETURNING yields no row.
+   * Claim a key for an owner. Returns true when the key is unclaimed (or
+   * its claim expired), or is already held by the same owner and not yet
+   * marked done; false otherwise. Callers pass the queue message id as the
+   * owner, so a retry of one queue message keeps its claim while a
+   * redelivered copy (a new queue message) is a duplicate.
+   *
+   * Without an owner (older workers), only the first claim wins.
+   *
+   * A single statement, so concurrent callers can't both win: an expired
+   * claim is overwritten, a live one is left alone unless the owner
+   * matches, and otherwise RETURNING yields no row.
    *
    * Keys: raw EventSub message ids (router), `<handlerId>:<messageId>`
    * (handlers), `send:<sendId>` (sends).
    */
-  claim(key: string): boolean {
+  claim(key: string, owner?: string): boolean {
     const now = Date.now();
-    const claimed = queryRows<{ message_id: string }>(
+    const expired = now - DEDUPE_WINDOW_MS;
+    // `owner = excluded.owner` is never true for a NULL owner.
+    const claimed = queryRows<{ done_at: number | null }>(
       this.sql,
-      `INSERT INTO message_claims (message_id, claimed_at)
-       VALUES (?, ?)
-       ON CONFLICT(message_id) DO UPDATE SET claimed_at = excluded.claimed_at
+      `INSERT INTO message_claims (message_id, claimed_at, owner)
+       VALUES (?, ?, ?)
+       ON CONFLICT(message_id) DO UPDATE SET
+         claimed_at = CASE WHEN message_claims.claimed_at <= ?
+           THEN excluded.claimed_at ELSE message_claims.claimed_at END,
+         done_at = CASE WHEN message_claims.claimed_at <= ?
+           THEN NULL ELSE message_claims.done_at END,
+         owner = excluded.owner
          WHERE message_claims.claimed_at <= ?
-       RETURNING message_id`,
+           OR message_claims.owner = excluded.owner
+       RETURNING done_at`,
       key,
       now,
-      now - DEDUPE_WINDOW_MS
+      // eslint-disable-next-line unicorn/no-null -- SQL NULL: no owner
+      owner ?? null,
+      expired,
+      expired,
+      expired
     );
 
     // At most one prune is ever queued (pending-only idempotency key).
@@ -420,7 +443,21 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
       { key: PRUNE_DEDUPE_TASK }
     );
 
-    return claimed.length > 0;
+    return claimed.length > 0 && claimed[0]?.done_at === null;
+  }
+
+  /**
+   * Mark an owner's claim done, so its own retries stop claiming it too.
+   * Sends call this once Twitch accepts the message.
+   */
+  completeClaim(key: string, owner: string): void {
+    this.sql.exec(
+      `UPDATE message_claims SET done_at = ?
+       WHERE message_id = ? AND owner = ?`,
+      Date.now(),
+      key,
+      owner
+    );
   }
 
   /**
@@ -428,7 +465,8 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
    * enabled handlers want it and with which flags.
    */
   routeEvent(input: RouteEventInput): RouteResult {
-    const fresh = input.messageId === null || this.claim(input.messageId);
+    const fresh =
+      input.messageId === null || this.claim(input.messageId, input.owner);
     if (!fresh) return { fresh, handlers: [], flags: [] };
 
     const enabled = this.listHandlers();
@@ -448,14 +486,19 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
 
   /**
    * Take one chat-send token for a sender. With a `claimKey`, the send is
-   * claimed first: a repeat returns `{ ok: false, duplicate: true }` without
-   * spending a token. The claim is kept when no token is available, so the
-   * caller's retry passes `null`. The bucket refills lazily from elapsed
-   * time, so no alarm is needed.
+   * claimed for `owner` first: a duplicate, or a send `completeClaim` marked
+   * done, returns `{ ok: false, duplicate: true }` without spending a token.
+   * The claim is kept when no token is available, so the owner's retry
+   * claims again. (Older workers pass `null` on a retry instead.) The bucket
+   * refills lazily from elapsed time, so no alarm is needed.
    */
-  acquireSendSlot(senderId: SenderId, claimKey: string | null): SendSlot {
+  acquireSendSlot(
+    senderId: SenderId,
+    claimKey: string | null,
+    owner?: string
+  ): SendSlot {
     assertSender(senderId);
-    if (claimKey !== null && !this.claim(claimKey)) {
+    if (claimKey !== null && !this.claim(claimKey, owner)) {
       return { ok: false, duplicate: true };
     }
 

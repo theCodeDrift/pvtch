@@ -23,23 +23,25 @@ const sendResponse = z.object({
 
 /**
  * Post a handler's reply to chat as its sender, within the channel's rate
- * limit for that sender. The first attempt claims `send:<sendId>` in the
- * same DO call that takes the token, so a duplicate request posts nothing.
+ * limit for that sender. Every attempt claims `send:<sendId>` for this queue
+ * message (`owner`) in the same DO call that takes the token, so a duplicate
+ * request posts nothing while our own retries still can.
+ *
+ * Once Twitch accepts the message the claim is marked done, so a retry after
+ * a later failure acks instead of posting again. A crash between the POST
+ * and that mark still reposts on retry; no ordering can close that gap.
  */
 export async function handleSend(
   env: Env,
   message: TwitchSendMessage,
-  attempts: number,
+  owner: string,
   now = Date.now()
 ): Promise<Outcome> {
   if (now - message.timestamp > MAX_REPLY_AGE_MS) return ack;
 
   const channel = channelStub(env, message.broadcasterId);
-  const slot = await channel.acquireSendSlot(
-    message.senderId,
-    // eslint-disable-next-line unicorn/no-null -- RPC: null means "don't claim"
-    attempts === 1 ? `send:${message.sendId}` : null
-  );
+  const claimKey = `send:${message.sendId}`;
+  const slot = await channel.acquireSendSlot(message.senderId, claimKey, owner);
   if (!slot.ok) {
     if ('duplicate' in slot) return ack;
     return retryIn(slot.retryAfterMs / 1000);
@@ -74,6 +76,13 @@ export async function handleSend(
   if (!response.ok) {
     console.error('Send chat message failed', { status: response.status });
     return ack;
+  }
+
+  // Posted. A failure to record that must not retry and post again.
+  try {
+    await channel.completeClaim(claimKey, owner);
+  } catch (error) {
+    console.error('Could not mark chat message sent', error);
   }
 
   // A 200 can still mean "not sent" (AutoMod, duplicate, channel settings).
