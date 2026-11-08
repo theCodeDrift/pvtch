@@ -9,7 +9,7 @@ import {
   instanceAccessContext,
   userContext,
 } from '@/context';
-import { normalizeKey } from '@/lib/normalize-key';
+import { importLegacyLingoConfig } from '@/lib/lingo-legacy';
 import type { LingoPluginConfig } from '../../../do/plugins/lingo';
 import { isKnownLanguage, normalizeLanguage } from '@pvtch/shared/languages';
 import {
@@ -55,24 +55,6 @@ const trimToLength = (str: string, maxLength: number) => {
     .join('');
 };
 
-const parseConfig = (configString?: string): LingoConfig => {
-  if (!configString || configString.length === 0) {
-    return defaults;
-  }
-
-  let parsed: Partial<LingoConfig> = {};
-  try {
-    parsed = JSON.parse(configString) as Partial<LingoConfig>;
-  } catch {
-    // ignore parse errors
-  }
-
-  return {
-    bots: [parsed.bots ?? defaults.bots].flat().filter((v) => v !== undefined),
-    language: parsed.language || 'english',
-  };
-};
-
 export function meta(_args: Route.MetaArgs) {
   return [
     { title: 'Lingo - Chat Translator for Twitch Streams - PVTCH' },
@@ -114,16 +96,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   let config: LingoPluginConfig | undefined = await lingoPlugin.getConfig();
 
   // Temporary migration: pull from old DO if no config exists yet
-  if (!config) {
-    const oldKey = normalizeKey(user.token, 'lingo-config');
-    const oldStub = env.PVTCH_BACKEND.get(env.PVTCH_BACKEND.idFromName(oldKey));
-    const oldConfigString = await oldStub.get();
-    if (oldConfigString && oldConfigString.length > 0) {
-      const parsed = parseConfig(oldConfigString);
-      await lingoPlugin.import(parsed);
-      config = parsed;
-    }
-  }
+  config ??= await importLegacyLingoConfig(env, user.id, user.token);
 
   return data({
     authenticated: true as const,

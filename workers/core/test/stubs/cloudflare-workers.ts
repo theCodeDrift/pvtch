@@ -11,4 +11,7 @@ export class DurableObject<EnvType = unknown> {
   }
 }
 
-export class RpcTarget {}
+export class RpcTarget {
+  // Runtime RPC stubs are disposable, and callers hold them with `using`.
+  [Symbol.dispose](): void {}
+}
