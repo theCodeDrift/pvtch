@@ -7,16 +7,15 @@ import { vi } from 'vitest';
 export class FakeChannel {
   /** Claimed keys and their owners. */
   claimed = new Map<string, string | undefined>();
-  done = new Set<string>();
   seen = new Set<string>();
   settings: { language: string | null } = { language: null };
 
-  /** Same rules as TwitchChannel.claim: the owner may claim again until
-   * the claim is done; anyone else (or no owner) may not. */
+  /** Same rules as TwitchChannel.claim: the owner may claim again; anyone
+   * else (or no owner) may not. Lingual never marks a claim done. */
   claim(key: string, owner?: string) {
     if (this.claimed.has(key)) {
       const held = this.claimed.get(key);
-      return owner !== undefined && held === owner && !this.done.has(key);
+      return owner !== undefined && held === owner;
     }
     this.claimed.set(key, owner);
     return true;
