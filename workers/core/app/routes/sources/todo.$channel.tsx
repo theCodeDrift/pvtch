@@ -83,18 +83,35 @@ const taskSorter = (streamer?: string) => (a: Task, b: Task) => {
   return 0;
 };
 
-/** Adds a task for a user to the collection */
-const addTask = (user: string, additions: string[], updater: TaskUpdater) => {
-  const nextItems = additions.map((description) => ({
-    username: user,
-    description,
-    completed: false,
-    focused: 0,
-    ts: Date.now(),
-    id: nanoid(),
-  }));
+/**
+ * Adds tasks for a user, up to `max` incomplete tasks. The limit is checked
+ * against the current state inside the updater, never a captured copy, so
+ * tasks completed or cleared since the command handler was bound free slots.
+ */
+const addTask = (
+  user: string,
+  additions: string[],
+  max: number,
+  updater: TaskUpdater
+) => {
+  updater((tasks) => {
+    const existing = getTasks(user, false, tasks);
+    const allowed = additions.slice(0, Math.max(0, max - existing.length));
+    if (allowed.length === 0) {
+      return tasks;
+    }
 
-  updater((tasks) => [...tasks, ...nextItems]);
+    const nextItems = allowed.map((description) => ({
+      username: user,
+      description,
+      completed: false,
+      focused: 0,
+      ts: Date.now(),
+      id: nanoid(),
+    }));
+
+    return [...tasks, ...nextItems];
+  });
 };
 
 /** Marks a task as done */
@@ -337,18 +354,12 @@ export default function TodoSource() {
       extra
     ) => {
       if (command.toLocaleLowerCase() === params.add.toLocaleLowerCase()) {
-        const existing = getTasks(user, false, tasks);
-
         const adds = message
           .split(';')
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 
-        const allowedToAdd = adds.slice(
-          0,
-          Math.max(0, params.count - existing.length)
-        );
-        addTask(user, allowedToAdd, updateTasks);
+        addTask(user, adds, params.count, updateTasks);
       }
 
       if (command.toLocaleLowerCase() === params.done.toLocaleLowerCase()) {
