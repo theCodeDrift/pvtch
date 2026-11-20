@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Lingual's translation pipeline in `pvtch-twitch`: its own settings in `TwitchChannel`, fragment-based detection input, the re-implemented detection decision, the LLM call, and reply formatting.
+Lingual's translation pipeline in `pvtch-lingual`: its own settings in `TwitchChannel`, fragment-based detection input, and reply formatting. Detection and translation models are the OpenRouter flow in `lingual-worker`.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ Lingual SHALL keep its own settings, a target `language` and a list of `ignoredC
 
 ### Requirement: Fragment-based detection input
 
-The bot pipeline SHALL build its detection input from `event.message.fragments` by concatenating only fragments of type `text`, excluding `emote`, `cheermote`, and `mention` fragments. It SHALL then strip URLs, strip emote-shaped tokens (for third-party emotes delivered as text), collapse whitespace, and collapse runs of 3+ identical characters to 2. The original `event.message.text` SHALL remain the LLM input.
+The bot pipeline SHALL build its detection input from `event.message.fragments` by concatenating only fragments of type `text`, excluding `emote`, `cheermote`, and `mention` fragments. It SHALL then strip URLs, strip emote-shaped tokens (for third-party emotes delivered as text), collapse whitespace, and collapse runs of 3+ identical characters to 2. The translator's input is set by the OpenRouter flow in `lingual-worker`.
 
 #### Scenario: Native emotes and mentions removed
 
@@ -39,38 +39,19 @@ The bot pipeline SHALL build its detection input from `event.message.fragments` 
 - **WHEN** a text fragment is `KEKW que risa`
 - **THEN** the detection input is `que risa`
 
-### Requirement: Independent detection decision
+### Requirement: Reply formatting
 
-The bot SHALL have its own detection module under `workers/twitch/src/lingo/` that returns `TRANSLATE` or a skip action, initially equivalent in behavior to `workers/core`'s `decide()` (length gate, script gate, classifier ensemble with the same thresholds), and SHALL NOT import from `workers/core`. Changes to the bot's detection SHALL NOT affect `/lingo/translate/:token`.
-
-#### Scenario: Message already in target language
-
-- **WHEN** detection input is confidently in the target language
-- **THEN** the pipeline skips without calling the LLM
-
-#### Scenario: Foreign-language message
-
-- **WHEN** detection returns `TRANSLATE`
-- **THEN** the LLM is called with the original message text and target language
-
-### Requirement: Translation via Workers AI and reply formatting
-
-On `TRANSLATE`, the pipeline in `pvtch-lingual` SHALL call Workers AI with the bot's own copy of the translation prompt and schema, and SHALL skip replying when the LLM fails, reports the same language as the target, or yields an empty string after removing `@usernames`. The reply text SHALL be the translation only (no `ImTyping` prefix), truncated to 500 characters, and requested as a `send` for the handler's sender threaded to the source message. The pipeline SHALL NOT cache translations.
-
-#### Scenario: Successful translation
-
-- **WHEN** `hola amigo` is translated to English as `hello friend`
-- **THEN** a `send` of `hello friend` threaded to the source message is enqueued
-
-#### Scenario: LLM says same language
-
-- **WHEN** the LLM reports the detected language equals the target
-- **THEN** no `send` is enqueued
+The reply text SHALL be the translation only (no `ImTyping` prefix), truncated to 500 characters, and requested as a `send` for the handler's sender. A translation that is empty after removing `@usernames` SHALL NOT be sent. The pipeline SHALL NOT cache translations.
 
 #### Scenario: Long translation
 
 - **WHEN** the translation exceeds 500 characters
 - **THEN** the requested reply is truncated to 500 characters
+
+#### Scenario: Only usernames
+
+- **WHEN** the translation is `@bob @alice`
+- **THEN** no `send` is enqueued
 
 ### Requirement: Shared bot list and language constants
 

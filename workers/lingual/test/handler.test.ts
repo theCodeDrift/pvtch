@@ -7,14 +7,12 @@ import {
   MAX_RETRIES,
   NO_THREAD_FLAG,
   RETRY_DELAY_SECONDS,
-  TRANSLATE_V2_FLAG,
   handleLingualEvent,
 } from '../src/handler';
 import { messageKey } from '../src/lingo/message-key';
 import { translateChatMessageV2 } from '../src/lingo/pipeline-v2';
 import {
   BROADCASTER_ID,
-  aiResponse,
   chatEvent,
   createTestEnv,
   handlerEvent,
@@ -22,6 +20,14 @@ import {
 } from './helpers/fakes';
 
 vi.mock('../src/lingo/pipeline-v2');
+
+const translate = vi.mocked(translateChatMessageV2);
+const REPLY = {
+  kind: 'reply',
+  reply: 'hi friends, how is everyone tonight?',
+} as const;
+const QUIET = { kind: 'quiet' } as const;
+const FAILED = { kind: 'failed' } as const;
 
 const NOW = new Date('2026-10-23T12:00:00.000Z').getTime();
 
@@ -40,13 +46,8 @@ describe('handleLingualEvent', () => {
     t.channel(BROADCASTER_ID).settings = {
       language: 'english',
     };
-    t.ai.mockResolvedValue(
-      aiResponse({
-        detected: 'Spanish',
-        detectedCode: 'spa',
-        translation: 'hi friends, how is everyone tonight?',
-      })
-    );
+    translate.mockReset();
+    translate.mockResolvedValue(REPLY);
   });
 
   afterEach(() => {
@@ -87,29 +88,11 @@ describe('handleLingualEvent', () => {
     );
   });
 
-  it('uses the OpenRouter flow with the translate-v2 flag', async () => {
-    vi.mocked(translateChatMessageV2).mockResolvedValue({
-      kind: 'reply',
-      reply: 'hi from v2',
-    });
-
-    await handleLingualEvent(
-      t.env,
-      handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
-      delivery(1)
-    );
-
-    expect(t.ai).not.toHaveBeenCalled();
-    expect(t.send).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'hi from v2' })
-    );
-  });
-
   it('acts once when the same fan-out arrives twice', async () => {
     await handleLingualEvent(t.env, handlerEvent(), delivery(1, 'q-1'));
     await handleLingualEvent(t.env, handlerEvent(), delivery(1, 'q-2'));
 
-    expect(t.ai).toHaveBeenCalledOnce();
+    expect(translate).toHaveBeenCalledOnce();
     expect(t.send).toHaveBeenCalledOnce();
   });
 
@@ -125,7 +108,7 @@ describe('handleLingualEvent', () => {
       delivery(1)
     );
 
-    expect(t.ai).toHaveBeenCalledOnce();
+    expect(translate).toHaveBeenCalledOnce();
     expect(t.send).toHaveBeenCalledOnce();
   });
 
@@ -175,7 +158,7 @@ describe('handleLingualEvent', () => {
         handlerEvent(chatEvent({ source_broadcaster_user_id: '999' })),
         delivery(1)
       );
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
 
     it('a command', async () => {
@@ -191,7 +174,7 @@ describe('handleLingualEvent', () => {
         ),
         delivery(1)
       );
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
 
     it('a known bot', async () => {
@@ -200,14 +183,14 @@ describe('handleLingualEvent', () => {
         handlerEvent(chatEvent({ chatter_user_login: 'Nightbot' })),
         delivery(1)
       );
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
 
     it('a channel with no Lingual language set', async () => {
       // eslint-disable-next-line unicorn/no-null -- RPC returns null
       t.channel(BROADCASTER_ID).settings.language = null;
       await handleLingualEvent(t.env, handlerEvent(), delivery(1));
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
 
     it('a message more than 60 seconds old', async () => {
@@ -216,7 +199,7 @@ describe('handleLingualEvent', () => {
         handlerEvent(chatEvent(), { timestamp: NOW - 61_000 }),
         delivery(1)
       );
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
 
     it('an unexpected event type', async () => {
@@ -225,14 +208,12 @@ describe('handleLingualEvent', () => {
         handlerEvent(chatEvent(), { subscriptionType: 'channel.follow' }),
         delivery(1)
       );
-      expect(t.ai).not.toHaveBeenCalled();
+      expect(translate).not.toHaveBeenCalled();
     });
   });
 
-  it('sends nothing when the translation is empty', async () => {
-    t.ai.mockResolvedValue(
-      aiResponse({ detected: 'Spanish', detectedCode: 'spa', translation: '' })
-    );
+  it('sends nothing when the translation is quiet', async () => {
+    translate.mockResolvedValue(QUIET);
 
     const outcome = await handleLingualEvent(
       t.env,
@@ -248,7 +229,7 @@ describe('handleLingualEvent', () => {
     beforeEach(() => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.spyOn(console, 'warn').mockImplementation(() => {});
-      t.ai.mockRejectedValueOnce(new Error('AI down'));
+      translate.mockResolvedValueOnce(FAILED);
     });
 
     it('retries after a short delay', async () => {
@@ -279,18 +260,6 @@ describe('handleLingualEvent', () => {
       expect(t.send).toHaveBeenCalledOnce();
     });
 
-    it('retries with the OpenRouter flow too', async () => {
-      vi.mocked(translateChatMessageV2).mockResolvedValue({ kind: 'failed' });
-
-      const outcome = await handleLingualEvent(
-        t.env,
-        handlerEvent(chatEvent(), { flags: [TRANSLATE_V2_FLAG] }),
-        delivery(1)
-      );
-
-      expect(outcome).toMatchObject({ type: 'retry' });
-    });
-
     it('leaves a repeat during the retry to the retry', async () => {
       await handleLingualEvent(
         t.env,
@@ -309,7 +278,7 @@ describe('handleLingualEvent', () => {
       );
 
       expect(repeat).toEqual({ type: 'ack' });
-      expect(t.ai).toHaveBeenCalledTimes(2);
+      expect(translate).toHaveBeenCalledTimes(2);
       expect(t.send).toHaveBeenCalledOnce();
       expect(t.send).toHaveBeenCalledWith(
         expect.objectContaining({ sendId: 'lingual:m-1' })
@@ -348,27 +317,21 @@ describe('handleLingualEvent', () => {
     });
 
     it('lets a repeat translate after the last attempt fails', async () => {
-      t.ai.mockRejectedValue(new Error('AI down'));
+      translate.mockResolvedValue(FAILED);
       const m1 = handlerEvent(chatEvent(), { messageId: 'm-1' });
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         await handleLingualEvent(t.env, m1, delivery(attempt, 'q-1'));
       }
       const repeat = handlerEvent(chatEvent(), { messageId: 'm-2' });
       await handleLingualEvent(t.env, repeat, delivery(1, 'q-2'));
-      expect(t.ai).toHaveBeenCalledTimes(MAX_RETRIES);
+      expect(translate).toHaveBeenCalledTimes(MAX_RETRIES);
 
       const last = await handleLingualEvent(
         t.env,
         m1,
         delivery(MAX_RETRIES + 1, 'q-1')
       );
-      t.ai.mockResolvedValue(
-        aiResponse({
-          detected: 'Spanish',
-          detectedCode: 'spa',
-          translation: 'hi friends, how is everyone tonight?',
-        })
-      );
+      translate.mockResolvedValue(REPLY);
       await handleLingualEvent(
         t.env,
         handlerEvent(chatEvent(), { messageId: 'm-3' }),
@@ -408,7 +371,7 @@ describe('handleLingualEvent', () => {
     });
 
     it('keeps a mark another queue message set', async () => {
-      t.ai.mockRejectedValue(new Error('AI down'));
+      translate.mockResolvedValue(FAILED);
       const key = await messageKey(chatEvent().message.fragments);
       t.channel(BROADCASTER_ID).seen.set(key!, 'q-newer');
 
@@ -446,9 +409,7 @@ describe('handleLingualEvent', () => {
   });
 
   it('keeps the mark after a quiet outcome', async () => {
-    t.ai.mockResolvedValue(
-      aiResponse({ detected: 'Spanish', detectedCode: 'spa', translation: '' })
-    );
+    translate.mockResolvedValue(QUIET);
 
     await handleLingualEvent(
       t.env,
@@ -461,7 +422,7 @@ describe('handleLingualEvent', () => {
       delivery(1, 'q-2')
     );
 
-    expect(t.ai).toHaveBeenCalledOnce();
+    expect(translate).toHaveBeenCalledOnce();
   });
 
   it('keeps the mark after a reply', async () => {
@@ -525,7 +486,7 @@ describe('lingual consumer', () => {
   it('retries with the delay the handler asks for', async () => {
     const t = createTestEnv();
     t.channel(BROADCASTER_ID).settings.language = 'english';
-    t.ai.mockRejectedValue(new Error('AI down'));
+    translate.mockResolvedValue(FAILED);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { message, batch: b } = batch(handlerEvent());
 
@@ -540,13 +501,7 @@ describe('lingual consumer', () => {
   it('retries when handling throws', async () => {
     const t = createTestEnv();
     t.channel(BROADCASTER_ID).settings.language = 'english';
-    t.ai.mockResolvedValue(
-      aiResponse({
-        detected: 'Spanish',
-        detectedCode: 'spa',
-        translation: 'hi friends',
-      })
-    );
+    translate.mockResolvedValue(REPLY);
     t.send.mockRejectedValueOnce(new Error('queue down'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { message, batch: b } = batch(handlerEvent());

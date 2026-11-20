@@ -10,7 +10,6 @@ import type {
 } from '@pvtch/shared/twitch-queue';
 
 import { messageKey } from './lingo/message-key';
-import { translateChatMessage } from './lingo/pipeline';
 import { translateChatMessageV2 } from './lingo/pipeline-v2';
 
 /** A translation this late is noise; chat has moved on. pvtch-twitch checks
@@ -27,9 +26,6 @@ export const MAX_RETRIES = 3;
 
 /** Post as a plain message instead of a threaded reply. */
 export const NO_THREAD_FLAG = 'lingual.no-thread';
-
-/** Use the OpenRouter translation flow instead of Workers AI. */
-export const TRANSLATE_V2_FLAG = 'lingual.translate-v2';
 
 /** The broadcaster's TwitchChannel Durable Object in pvtch-storage. */
 function channelStub(env: Env, broadcasterId: string) {
@@ -117,10 +113,7 @@ export async function handleLingualEvent(
     if (!(await cache.firstSeen(key, delivery.id))) return ack;
   }
 
-  const translateMessage = message.flags.includes(TRANSLATE_V2_FLAG)
-    ? translateChatMessageV2
-    : translateChatMessage;
-  const result = await translateMessage(env, event, settings.language);
+  const result = await translateChatMessageV2(env, event, settings.language);
   if (result.kind === 'failed') {
     const outcome = retryWhileFresh(message, now);
     // Giving up without a reply: the retry was skipped as too late, or this

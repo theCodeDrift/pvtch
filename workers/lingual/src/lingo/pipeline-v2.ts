@@ -6,9 +6,35 @@ import type {
 import { v2ConfigFromEnv, type V2Config } from './config-v2';
 import { targetLanguageProbability } from './detector-v2';
 import { openRouterClient } from './openrouter';
-import { formatReply, type ChatTranslation } from './pipeline';
 import { URL_RE, preprocess, textFromFragments } from './preprocess';
 import { translateV2 } from './translator-v2';
+
+/** Twitch's chat message length limit. */
+export const MAX_REPLY_LENGTH = 500;
+
+/**
+ * What a translation flow decided. `quiet` is a legitimate no-op (already in
+ * the target language, nothing to translate, only @usernames left); `failed`
+ * means a model call failed and a retry may succeed.
+ */
+export type ChatTranslation =
+  | { kind: 'reply'; reply: string }
+  | { kind: 'quiet' }
+  | { kind: 'failed' };
+
+const USERNAME_RE = /@[a-z0-9_]+?([^a-z0-9_]|$)/gi;
+
+/** The translation trimmed to Twitch's limit, or undefined when nothing but
+ * @usernames would be left. */
+export function formatReply(translation: string): string | undefined {
+  if (translation.replaceAll(USERNAME_RE, '$1').trim() === '') {
+    return undefined;
+  }
+  const trimmed = translation.trim();
+  return trimmed.length > MAX_REPLY_LENGTH
+    ? trimmed.slice(0, MAX_REPLY_LENGTH)
+    : trimmed;
+}
 
 export type V2Outcome =
   | 'translated'

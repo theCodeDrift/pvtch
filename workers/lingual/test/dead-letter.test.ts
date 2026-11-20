@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import worker from '../src/index';
+import { translateChatMessageV2 } from '../src/lingo/pipeline-v2';
 import { createTestEnv, handlerEvent } from './helpers/fakes';
+
+vi.mock('../src/lingo/pipeline-v2');
 
 describe('lingual-events-dlq', () => {
   afterEach(() => {
@@ -27,7 +30,7 @@ describe('lingual-events-dlq', () => {
     await worker.queue(batch, t.env);
 
     expect(message.ack).toHaveBeenCalledOnce();
-    expect(t.ai).not.toHaveBeenCalled();
+    expect(translateChatMessageV2).not.toHaveBeenCalled();
     expect(t.send).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({

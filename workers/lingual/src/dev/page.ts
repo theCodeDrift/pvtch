@@ -20,12 +20,6 @@ export function harnessPage(): string {
   <label>Message
     <textarea id="text" maxlength="500" required></textarea>
   </label>
-  <label>Translation flow
-    <select id="flow">
-      <option value="v2">v2: OpenRouter (Decider detection, Gemma)</option>
-      <option value="v1">v1: Workers AI (local classifiers)</option>
-    </select>
-  </label>
   <button>Send</button>
   <p id="status" class="note"></p>
 </form>
@@ -39,7 +33,6 @@ export function harnessPage(): string {
       body: JSON.stringify({
         broadcasterId: byId('broadcasterId').value,
         text: byId('text').value,
-        flow: byId('flow').value,
       }),
     });
     byId('status').textContent = response.ok

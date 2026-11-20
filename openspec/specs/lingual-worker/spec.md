@@ -8,7 +8,7 @@ The `pvtch-lingual` worker consumes the `lingual-events` queue and translates ch
 
 ### Requirement: Lingual worker
 
-`workers/lingual` SHALL deploy as `pvtch-lingual` with `workers_dev: false`, no routes, and `observability.enabled: true`. It SHALL bind `TWITCH_CHANNEL` (`script_name: "pvtch-storage"`), a `TWITCH_EVENTS` producer on `twitch-events`, `AI`, and the Secrets Store secret `PVTCH_OPENROUTER_API_KEY`. It SHALL NOT bind Twitch secrets or `PVTCH_ACCOUNTS`. It SHALL consume `lingual-events` with `max_batch_size: 1`, `max_batch_timeout: 1`, `max_retries: 3`, `max_concurrency: 10`, and dead-letter queue `lingual-events-dlq`. It SHALL deploy through the existing CI workflow after `pvtch-storage`.
+`workers/lingual` SHALL deploy as `pvtch-lingual` with `workers_dev: false`, no routes, and `observability.enabled: true`. It SHALL bind `TWITCH_CHANNEL` (`script_name: "pvtch-storage"`), a `TWITCH_EVENTS` producer on `twitch-events`, and the Secrets Store secret `PVTCH_OPENROUTER_API_KEY`. It SHALL NOT bind Twitch secrets, `PVTCH_ACCOUNTS` or Workers AI. It SHALL consume `lingual-events` with `max_batch_size: 1`, `max_batch_timeout: 1`, `max_retries: 3`, `max_concurrency: 10`, and dead-letter queue `lingual-events-dlq`. It SHALL deploy through the existing CI workflow after `pvtch-storage`.
 
 #### Scenario: No public surface
 
@@ -22,7 +22,7 @@ The `pvtch-lingual` worker consumes the `lingual-events` queue and translates ch
 
 ### Requirement: Lingual handler flow
 
-For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, then skip without replying when any of: `chatter_user_login` is in `knownBots` (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`. On its first attempt it SHALL also skip a message whose normalized text (no emotes, mentions or URLs, ignoring case, punctuation and spacing) `messageCache()` has already seen, keyed by a hash so the channel never holds chat text. Otherwise it SHALL run the lingo pipeline and, on a translation, enqueue a `send` request. A thrown error SHALL retry the message.
+For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, then skip without replying when any of: `chatter_user_login` is in `knownBots` (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`. On its first attempt it SHALL also skip a message whose normalized text (no emotes, mentions or URLs, ignoring case, punctuation and spacing) `messageCache()` has already seen, keyed by a hash so the channel never holds chat text. Otherwise it SHALL run the OpenRouter translation flow and, on a translation, enqueue a `send` request. A thrown error SHALL retry the message.
 
 #### Scenario: Repeated message
 
@@ -44,14 +44,9 @@ For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, 
 - **WHEN** an event has `source_broadcaster_user_id: "999"` and `broadcaster_user_id: "123"`
 - **THEN** no translation or `send` occurs
 
-### Requirement: Translation flow selection
+### Requirement: Reply threading
 
-The `lingual.translate-v2` channel flag SHALL select the OpenRouter flow (v2) for that channel. Without it, a message SHALL take the Workers AI flow (v1). The `lingual.no-thread` flag SHALL post a reply as a plain message instead of a threaded reply. Both flows SHALL share the handler's skips, dedupe, and `send` request.
-
-#### Scenario: Flag on
-
-- **WHEN** a message is handled for a channel with `lingual.translate-v2` on
-- **THEN** it takes the OpenRouter flow and Workers AI isn't called
+A reply SHALL be threaded to the chat message it translates. The `lingual.no-thread` channel flag SHALL post it as a plain message instead.
 
 #### Scenario: No thread
 
@@ -60,7 +55,7 @@ The `lingual.translate-v2` channel flag SHALL select the OpenRouter flow (v2) fo
 
 ### Requirement: OpenRouter translation flow
 
-The v2 flow SHALL ask a decision model how likely it is that all of the message is in the target language, using the message's text fragments cleaned by `preprocess`. It SHALL translate only when that probability is at or below `LINGUAL_V2_MAX_TARGET_PROBABILITY`. Past that check a translation is required, so the translator SHALL NOT judge the language again. The translator SHALL NOT receive emotes, cheermotes or URLs. The source language SHALL NOT be restricted. Any failure, refusal or doubt SHALL stay quiet without a reply, including a translation that repeats the message or is empty after removing `@usernames`.
+Every translated message SHALL take the OpenRouter flow (v2); no channel flag selects it. It SHALL ask a decision model how likely it is that all of the message is in the target language, using the message's text fragments cleaned by `preprocess`. It SHALL translate only when that probability is at or below `LINGUAL_V2_MAX_TARGET_PROBABILITY`. Past that check a translation is required, so the translator SHALL NOT judge the language again. The translator SHALL NOT receive emotes, cheermotes or URLs. The source language SHALL NOT be restricted. Any failure, refusal or doubt SHALL stay quiet without a reply, including a translation that repeats the message or is empty after removing `@usernames`.
 
 #### Scenario: Confident it's another language
 

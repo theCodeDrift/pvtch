@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openRouterClient } from '../src/lingo/openrouter';
 import { v2ConfigFromEnv } from '../src/lingo/config-v2';
 import {
+  MAX_REPLY_LENGTH,
+  formatReply,
   traceChatMessageV2,
   translateChatMessageV2,
 } from '../src/lingo/pipeline-v2';
@@ -24,6 +26,16 @@ const chatAnswer = (probability: number) =>
   translation(JSON.stringify({ probability }));
 const spanishReply = JSON.stringify({
   translation: 'hi friends, how is everyone tonight?',
+});
+
+describe('formatReply', () => {
+  it('returns nothing when only usernames remain', () => {
+    expect(formatReply('@bob @alice')).toBeUndefined();
+  });
+
+  it('truncates to 500 characters', () => {
+    expect(formatReply('a'.repeat(600))?.length).toBe(MAX_REPLY_LENGTH);
+  });
 });
 
 const quiet = { kind: 'quiet' };
