@@ -1,4 +1,6 @@
-import type { OpenRouter } from '@openrouter/sdk';
+import type { OpenRouterCore } from '@openrouter/sdk/core.js';
+import { chatSend } from '@openrouter/sdk/funcs/chatSend.js';
+import { unwrapAsync } from '@openrouter/sdk/types/fp.js';
 import { z } from 'zod';
 
 export interface TranslatorConfig {
@@ -39,7 +41,7 @@ const translationSchema = z.object({ translation: z.string() });
 /** Translate `input` that detection found isn't all in the target language.
  * Throws when the model fails or its answer is invalid. */
 export function translateV2(
-  client: OpenRouter,
+  client: OpenRouterCore,
   input: string,
   targetLanguage: string,
   config: TranslatorConfig
@@ -50,7 +52,7 @@ export function translateV2(
 /** Translate `input` a chatter asked to have in `targetLanguage`. Throws when
  * the model fails or its answer is invalid. */
 export function translateRequestedV2(
-  client: OpenRouter,
+  client: OpenRouterCore,
   input: string,
   targetLanguage: string,
   config: TranslatorConfig
@@ -59,32 +61,34 @@ export function translateRequestedV2(
 }
 
 async function translate(
-  client: OpenRouter,
+  client: OpenRouterCore,
   systemPrompt: string,
   input: string,
   { model, disableThinking }: TranslatorConfig
 ): Promise<string> {
-  const result = await client.chat.send({
-    chatRequest: {
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: input },
-      ],
-      responseFormat: {
-        type: 'json_schema',
-        jsonSchema: {
-          name: 'translation',
-          strict: true,
-          schema: translationSchema.toJSONSchema(),
+  const result = await unwrapAsync(
+    chatSend(client, {
+      chatRequest: {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: input },
+        ],
+        responseFormat: {
+          type: 'json_schema',
+          jsonSchema: {
+            name: 'translation',
+            strict: true,
+            schema: translationSchema.toJSONSchema(),
+          },
         },
+        // Only route to providers that honor the JSON schema.
+        provider: { requireParameters: true },
+        // Reply in chat time; a translation doesn't need thinking.
+        ...(disableThinking ? { reasoning: { effort: 'none' as const } } : {}),
       },
-      // Only route to providers that honor the JSON schema.
-      provider: { requireParameters: true },
-      // Reply in chat time; a translation doesn't need thinking.
-      ...(disableThinking ? { reasoning: { effort: 'none' as const } } : {}),
-    },
-  });
+    })
+  );
 
   const content = result.choices[0]?.message.content;
   if (typeof content !== 'string') {

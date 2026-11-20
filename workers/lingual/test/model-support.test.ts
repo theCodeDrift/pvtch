@@ -1,10 +1,22 @@
-import type { OpenRouter } from '@openrouter/sdk';
+import type { OpenRouterCore } from '@openrouter/sdk/core.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import { modelSupport } from '../src/dev/model-support';
 
+interface FakeClient {
+  list: (request: unknown) => Promise<unknown>;
+}
+
+// endpointsList asks the fake client's `list`, wrapped in an ok Result.
+vi.mock('@openrouter/sdk/funcs/endpointsList.js', () => ({
+  endpointsList: async (client: FakeClient, request: unknown) => ({
+    ok: true,
+    value: await client.list(request),
+  }),
+}));
+
 const clientWith = (...endpoints: string[][]) => {
-  const list = vi.fn(() =>
+  const list = vi.fn((_request: unknown) =>
     Promise.resolve({
       data: {
         endpoints: endpoints.map((supportedParameters) => ({
@@ -13,7 +25,8 @@ const clientWith = (...endpoints: string[][]) => {
       },
     })
   );
-  return { list, client: { endpoints: { list } } as unknown as OpenRouter };
+  const fake: FakeClient = { list };
+  return { list, client: fake as unknown as OpenRouterCore };
 };
 
 describe('modelSupport', () => {
