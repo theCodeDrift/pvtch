@@ -15,7 +15,6 @@ This app is a unified deployment that serves:
 - **Framework**: React Router 7 with SSR
 - **Runtime**: Cloudflare Workers
 - **Storage**: Cloudflare KV + Durable Objects (SQLite-backed)
-- **AI**: Cloudflare Workers AI (for translations)
 - **Styling**: Tailwind CSS v4
 - **UI Components**: Radix UI primitives
 
@@ -105,12 +104,6 @@ Configured in `wrangler.jsonc`:
 | Binding         | Class          | Purpose                                                    |
 | --------------- | -------------- | ---------------------------------------------------------- |
 | `PVTCH_BACKEND` | `PvtchBackend` | Per-user TTL-based storage for progress values and configs |
-
-### AI
-
-| Binding | Purpose                                |
-| ------- | -------------------------------------- |
-| `AI`    | Cloudflare Workers AI for translations |
 
 ## Authentication
 

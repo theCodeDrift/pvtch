@@ -1,6 +1,5 @@
-// The bot's own copy of lingo preprocessing, started from
-// workers/core/app/lib/lang-detect. It changes independently of the
-// /lingo/translate endpoint; don't import from workers/core.
+// Lingual's chat preprocessing, started from Lingo's language detection
+// (since removed from workers/core).
 
 import type { ChatFragment } from '@pvtch/shared/twitch-eventsub';
 

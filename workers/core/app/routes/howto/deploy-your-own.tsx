@@ -8,7 +8,7 @@ export function meta() {
     {
       name: 'description',
       content:
-        'Deploy your own PVTCH instance on Cloudflare Workers for free. Step-by-step guide covering Twitch OAuth setup, KV namespaces, Durable Objects, and Workers AI configuration.',
+        'Deploy your own PVTCH instance on Cloudflare Workers for free. Step-by-step guide covering Twitch OAuth setup, KV namespaces, and Durable Objects.',
     },
     { property: 'og:title', content: 'Self-Host PVTCH on Cloudflare Workers' },
     {
@@ -132,7 +132,7 @@ export default function DeployYourOwn() {
           individual streamers. Even during busy streams, you'd be challenged to
           reach these limits:
         </p>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <div className="font-semibold">Workers</div>
             <div className="text-sm text-muted-foreground">
@@ -154,20 +154,6 @@ export default function DeployYourOwn() {
             </div>
             <a
               href="https://developers.cloudflare.com/durable-objects/platform/pricing/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-brand hover:underline inline-flex items-center gap-1"
-            >
-              Pricing <ExternalLink className="size-3" />
-            </a>
-          </div>
-          <div>
-            <div className="font-semibold">Workers AI</div>
-            <div className="text-sm text-muted-foreground">
-              10,000 neurons/day
-            </div>
-            <a
-              href="https://developers.cloudflare.com/workers-ai/platform/pricing/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-brand hover:underline inline-flex items-center gap-1"
@@ -717,8 +703,12 @@ ALLOWED_USERS=your_username,friend_username,another_user`}
           <div>
             <h3 className="font-semibold">Translation not working</h3>
             <p className="text-muted-foreground text-sm">
-              Workers AI is enabled by default. Make sure your Cloudflare
-              account has AI enabled (it's in the free tier).
+              Lingual translates through OpenRouter. Make sure{' '}
+              <code className="bg-muted px-1 rounded">
+                PVTCH_OPENROUTER_API_KEY
+              </code>{' '}
+              is in your account&apos;s Secrets Store before deploying
+              pvtch-lingual.
             </p>
           </div>
         </div>
