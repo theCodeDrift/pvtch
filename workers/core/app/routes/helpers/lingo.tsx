@@ -211,11 +211,12 @@ export default function HelpersLingo() {
       >
         <TriangleAlert className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
         <p>
-          This page is deprecated and will be retired on December 6, 2026.{' '}
+          Lingo was retired early because its translation model was removed.
+          Your translate URL no longer translates.{' '}
           <Link to="/bots/lingual" className="underline underline-offset-2">
             Lingual
           </Link>{' '}
-          replaces it. Your translate URL keeps working for now.
+          replaces it.
         </p>
       </div>
       <p className="text-muted-foreground mb-6">

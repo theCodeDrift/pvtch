@@ -16,18 +16,15 @@ Create customizable progress bars for OBS browser sources. Track sub goals, dona
 - Features: Customizable colors, gradients, auto-reset timers, external API integration
 - Integration: OBS Browser Source
 
-### Lingo Translator
-AI-powered real-time chat translation. Automatically translates foreign language messages in your Twitch chat.
+### Lingo Translator (retired)
+Retired; its translate API returns 410 Gone. Lingual (/bots/lingual) replaces it.
 
 - URL: /helpers/lingo
-- Features: Auto-detect source language, configurable target language, bot filtering
-- Integration: Firebot, MixItUp, Streamer.bot, custom bots via HTTP API
 
 ## Technical Details
 
 - **Platform**: Cloudflare Workers with React Router
 - **Storage**: Cloudflare KV + Durable Objects (SQLite-backed)
-- **AI**: Cloudflare Workers AI for translations
 - **Authentication**: Twitch OAuth
 
 ## Self-Hosting
@@ -45,7 +42,7 @@ Progress Bar:
 - GET /progress/:token/:name/set?current=X&max=Y - Set progress value
 
 Lingo:
-- GET /lingo/translate/:token?user=USERNAME&message=MESSAGE - Translate a message
+- GET /lingo/translate/:token - Retired (410 Gone); use Lingual
 
 ## Contact
 

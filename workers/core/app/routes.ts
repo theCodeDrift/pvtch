@@ -66,12 +66,15 @@ export default [
   route('account/token/rotate', './routes/account.token.rotate.tsx'),
 
   // API routes (loader/action only)
-  route('lingo/translate/:token', './routes/lingo.translate.$token.tsx'),
   route('lingo/config/:token/set', './routes/lingo.config.$token.set.tsx'),
   route('progress/:token/:name/get', './routes/progress.$token.$name.get.tsx'),
   route('progress/:token/:name/set', './routes/progress.$token.$name.set.tsx'),
 
   // Deprecated routes (return 410 Gone)
+  route(
+    'lingo/translate/:token',
+    './routes/deprecated/lingo.translate.$token.tsx'
+  ),
   route(':token/kv/:id/set', './routes/deprecated/$token.kv.$id.set.tsx'),
   route(':token/kv/:id/get', './routes/deprecated/$token.kv.$id.get.tsx'),
   route(
