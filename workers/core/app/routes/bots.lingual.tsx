@@ -173,15 +173,18 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 400 }
       );
     }
+    // The command is only sent, and only checked, while it is turned on; off,
+    // the stored command is kept for when it is turned back on.
+    const commandEnabled = formField(formData, 'commandEnabled') === 'true';
     const command = formField(formData, 'command').trim().toLowerCase();
-    if (!isValidTranslateCommand(command)) {
+    if (commandEnabled && !isValidTranslateCommand(command)) {
       return data({ error: COMMAND_ERROR }, { status: 400 });
     }
     using lingual = await channel.lingual();
     await lingual.setSettings({
       language: resolved.name,
-      command,
-      commandEnabled: formField(formData, 'commandEnabled') === 'true',
+      commandEnabled,
+      ...(commandEnabled ? { command } : {}),
     });
     return data({ ok: 'saved' as const });
   }
@@ -246,8 +249,9 @@ function LingualSettingsForm({
         {
           intent: 'settings',
           language: value.language,
-          command: value.command,
           commandEnabled: String(value.commandEnabled),
+          // Off, the command is hidden; the stored one is kept.
+          ...(value.commandEnabled ? { command: value.command } : {}),
         },
         { method: 'POST' }
       );
@@ -332,35 +336,40 @@ function LingualSettingsForm({
       />
       <form.Subscribe
         selector={(state) => state.values.commandEnabled}
-        children={(commandEnabled) => (
-          <form.Field
-            name="command"
-            validators={{
-              onSubmit: ({ value }) =>
-                isValidTranslateCommand(value) ? undefined : COMMAND_ERROR,
-            }}
-            children={(field) => (
-              <Field>
-                <FieldLabel htmlFor="lingual-command">Command</FieldLabel>
-                <Input
-                  id="lingual-command"
-                  autoComplete="off"
-                  placeholder="!tr"
-                  maxLength={25}
-                  disabled={!commandEnabled}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]}
-                  </p>
-                )}
-              </Field>
-            )}
-          />
-        )}
+        children={(commandEnabled) =>
+          commandEnabled && (
+            <form.Field
+              name="command"
+              validators={{
+                // A hidden command is neither sent nor checked.
+                onSubmit: ({ value, fieldApi }) =>
+                  !fieldApi.form.getFieldValue('commandEnabled') ||
+                  isValidTranslateCommand(value)
+                    ? undefined
+                    : COMMAND_ERROR,
+              }}
+              children={(field) => (
+                <Field>
+                  <FieldLabel htmlFor="lingual-command">Command</FieldLabel>
+                  <Input
+                    id="lingual-command"
+                    autoComplete="off"
+                    placeholder="!tr"
+                    maxLength={25}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]}
+                    </p>
+                  )}
+                </Field>
+              )}
+            />
+          )
+        }
       />
       <div className="flex justify-end">
         <Button type="submit" disabled={saving}>
