@@ -5,7 +5,7 @@ import type {
 
 import { v2ConfigFromEnv, type V2Config } from './config-v2';
 import { targetLanguageProbability } from './detector-v2';
-import { openRouterClient } from './openrouter';
+import { describeOpenRouterError, openRouterClient } from './openrouter';
 import { URL_RE, preprocess, textFromFragments } from './preprocess';
 import { translateV2 } from './translator-v2';
 
@@ -107,7 +107,10 @@ export async function traceChatMessageV2(
       }
     );
   } catch (error) {
-    console.error('Lingual v2 detection failed', error);
+    console.error(
+      'Lingual v2 detection failed',
+      describeOpenRouterError(error)
+    );
     return { outcome: 'detection-failed', cleaned, error: String(error) };
   }
   console.log('Lingual v2 detection', { targetLanguage, probability });
@@ -128,7 +131,10 @@ export async function traceChatMessageV2(
       disableThinking: config.translatorDisableThinking,
     });
   } catch (error) {
-    console.error('Lingual v2 translate failed', error);
+    console.error(
+      'Lingual v2 translate failed',
+      describeOpenRouterError(error)
+    );
     return {
       outcome: 'translate-failed',
       cleaned,
