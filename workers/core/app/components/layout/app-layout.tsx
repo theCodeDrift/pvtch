@@ -54,10 +54,6 @@ const navigation = [
     ],
   },
   {
-    title: 'Helpers',
-    items: [{ title: 'Lingo', href: '/helpers/lingo' }],
-  },
-  {
     title: 'Bots',
     preview: true,
     items: [{ title: 'Lingual', href: '/bots/lingual' }],
