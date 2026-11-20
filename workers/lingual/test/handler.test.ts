@@ -10,7 +10,10 @@ import {
   handleLingualEvent,
 } from '../src/handler';
 import { messageKey } from '../src/lingo/message-key';
-import { translateChatMessageV2 } from '../src/lingo/pipeline-v2';
+import {
+  translateChatMessageV2,
+  translateRequestV2,
+} from '../src/lingo/pipeline-v2';
 import {
   BROADCASTER_ID,
   chatEvent,
@@ -22,6 +25,7 @@ import {
 vi.mock('../src/lingo/pipeline-v2');
 
 const translate = vi.mocked(translateChatMessageV2);
+const translateRequest = vi.mocked(translateRequestV2);
 const REPLY = {
   kind: 'reply',
   reply: 'hi friends, how is everyone tonight?',
@@ -30,6 +34,11 @@ const QUIET = { kind: 'quiet' } as const;
 const FAILED = { kind: 'failed' } as const;
 
 const NOW = new Date('2026-10-23T12:00:00.000Z').getTime();
+
+/** A chat event whose whole text is `text`. */
+function commandEvent(text: string) {
+  return chatEvent({ message: { text, fragments: [{ type: 'text', text }] } });
+}
 
 /** One queue message: `id` stays the same across its retries. */
 function delivery(attempts: number, id = 'q-1') {
@@ -45,9 +54,13 @@ describe('handleLingualEvent', () => {
     t = createTestEnv();
     t.channel(BROADCASTER_ID).settings = {
       language: 'english',
+      command: '!tr',
+      commandEnabled: true,
     };
     translate.mockReset();
     translate.mockResolvedValue(REPLY);
+    translateRequest.mockReset();
+    translateRequest.mockResolvedValue(REPLY);
   });
 
   afterEach(() => {
@@ -151,6 +164,67 @@ describe('handleLingualEvent', () => {
     expect(t.send).toHaveBeenCalledTimes(2);
   });
 
+  describe('the translate command', () => {
+    it('translates on request and replies in a thread', async () => {
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!tr es good morning chat')),
+        delivery(1)
+      );
+
+      expect(outcome).toEqual({ type: 'ack' });
+      expect(translate).not.toHaveBeenCalled();
+      expect(translateRequest).toHaveBeenCalledWith(t.env, {
+        language: 'spanish',
+        text: 'good morning chat',
+      });
+      expect(t.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: REPLY.reply,
+          replyParentMessageId: 'msg-1',
+        })
+      );
+    });
+
+    it('uses the configured command', async () => {
+      t.channel(BROADCASTER_ID).settings.command = '!translate';
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!translate de hello')),
+        delivery(1)
+      );
+      expect(translateRequest).toHaveBeenCalledWith(t.env, {
+        language: 'german',
+        text: 'hello',
+      });
+    });
+
+    it('works without a channel language', async () => {
+      // eslint-disable-next-line unicorn/no-null -- RPC returns null
+      t.channel(BROADCASTER_ID).settings.language = null;
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!tr es hello')),
+        delivery(1)
+      );
+      expect(translateRequest).toHaveBeenCalledOnce();
+    });
+
+    it('retries when the translation fails', async () => {
+      translateRequest.mockResolvedValue(FAILED);
+      const outcome = await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!tr es hello')),
+        delivery(1)
+      );
+      expect(outcome).toEqual({
+        type: 'retry',
+        delaySeconds: RETRY_DELAY_SECONDS,
+      });
+      expect(t.send).not.toHaveBeenCalled();
+    });
+  });
+
   describe('skips without translating', () => {
     it('a Shared Chat message from another channel', async () => {
       await handleLingualEvent(
@@ -175,6 +249,27 @@ describe('handleLingualEvent', () => {
         delivery(1)
       );
       expect(translate).not.toHaveBeenCalled();
+      expect(translateRequest).not.toHaveBeenCalled();
+    });
+
+    it('the translate command when it is turned off', async () => {
+      t.channel(BROADCASTER_ID).settings.commandEnabled = false;
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!tr es good morning')),
+        delivery(1)
+      );
+      expect(translate).not.toHaveBeenCalled();
+      expect(translateRequest).not.toHaveBeenCalled();
+    });
+
+    it('the translate command with an unknown language', async () => {
+      await handleLingualEvent(
+        t.env,
+        handlerEvent(commandEvent('!tr klingon good morning')),
+        delivery(1)
+      );
+      expect(translateRequest).not.toHaveBeenCalled();
     });
 
     it('a known bot', async () => {

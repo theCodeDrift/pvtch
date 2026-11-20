@@ -736,6 +736,8 @@ describe('TwitchChannel', () => {
       expect(channel.lingual().getSettings()).toEqual({
         // eslint-disable-next-line unicorn/no-null -- RPC returns null
         language: null,
+        command: '!tr',
+        commandEnabled: true,
       });
     });
 
@@ -743,6 +745,29 @@ describe('TwitchChannel', () => {
       channel.lingual().setSettings({ language: ' Spanish ' });
       expect(construct().lingual().getSettings()).toEqual({
         language: 'spanish',
+        command: '!tr',
+        commandEnabled: true,
+      });
+    });
+
+    it('updates the command without touching the language', () => {
+      channel.lingual().setSettings({ language: 'spanish' });
+      channel
+        .lingual()
+        .setSettings({ command: ' !Translate ', commandEnabled: false });
+      expect(construct().lingual().getSettings()).toEqual({
+        language: 'spanish',
+        command: '!translate',
+        commandEnabled: false,
+      });
+    });
+
+    it('keeps the command when only the language changes', () => {
+      channel.lingual().setSettings({ command: '!t', commandEnabled: false });
+      channel.lingual().setSettings({ language: 'german' });
+      expect(channel.lingual().getSettings()).toMatchObject({
+        command: '!t',
+        commandEnabled: false,
       });
     });
 

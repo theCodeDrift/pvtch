@@ -9,7 +9,11 @@ export class FakeChannel {
   claimed = new Map<string, string | undefined>();
   /** Seen message keys and who marked them. */
   seen = new Map<string, string | undefined>();
-  settings: { language: string | null } = { language: null };
+  settings: {
+    language: string | null;
+    command: string;
+    commandEnabled: boolean;
+  } = { language: null, command: '!tr', commandEnabled: true };
 
   /** Same rules as TwitchChannel.claim: the owner may claim again; anyone
    * else (or no owner) may not. Lingual never marks a claim done. */

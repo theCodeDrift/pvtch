@@ -10,6 +10,7 @@ import {
 } from 'react-router';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
+import { isValidTranslateCommand } from '@pvtch/shared/lingual-command';
 import { findSupportedTargetLanguage } from '@pvtch/shared/supported-languages';
 import { TWITCH_HANDLERS, TWITCH_SENDERS } from '@pvtch/shared/twitch-registry';
 import { Bot, CheckCircle, Clock, Loader, XCircle } from 'lucide-react';
@@ -32,6 +33,8 @@ import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { LanguageCombobox } from '@/components/language-combobox';
 import {
   Card,
@@ -44,6 +47,9 @@ import {
 
 const CHAT_SUBSCRIPTION = 'channel.chat.message';
 const LINGUAL_SENDER = TWITCH_HANDLERS.lingual.sender;
+
+const COMMAND_ERROR =
+  'A command is ! and up to 24 letters, numbers or underscores, like !tr.';
 
 const GRANT_ERRORS: Record<string, string> = {
   access_denied:
@@ -120,6 +126,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       enabled: handler.enabled,
       subscriptionStatus: subscription?.status ?? undefined,
       language: settings.language ?? '',
+      command: settings.command,
+      commandEnabled: settings.commandEnabled,
       botLogin: TWITCH_SENDERS[LINGUAL_SENDER].login,
       justEnabled: url.searchParams.get('enabled') === '1',
       grantError: grantError
@@ -165,8 +173,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 400 }
       );
     }
+    const command = formField(formData, 'command').trim().toLowerCase();
+    if (!isValidTranslateCommand(command)) {
+      return data({ error: COMMAND_ERROR }, { status: 400 });
+    }
     using lingual = await channel.lingual();
-    await lingual.setSettings({ language: resolved.name });
+    await lingual.setSettings({
+      language: resolved.name,
+      command,
+      commandEnabled: formField(formData, 'commandEnabled') === 'true',
+    });
     return data({ ok: 'saved' as const });
   }
   return data({ error: 'Unknown action' }, { status: 400 });
@@ -207,26 +223,41 @@ function StatusBadge({
   );
 }
 
+interface SettingsValues {
+  language: string;
+  command: string;
+  commandEnabled: boolean;
+}
+
 function LingualSettingsForm({
-  language,
+  settings,
   botLogin,
 }: {
-  language: string;
+  settings: SettingsValues;
   botLogin: string;
 }) {
   const fetcher = useFetcher<typeof action>();
   const saving = fetcher.state !== 'idle';
 
   const form = useForm({
-    defaultValues: { language },
+    defaultValues: settings,
     onSubmit: ({ value }) => {
-      void fetcher.submit({ intent: 'settings', ...value }, { method: 'POST' });
+      void fetcher.submit(
+        {
+          intent: 'settings',
+          language: value.language,
+          command: value.command,
+          commandEnabled: String(value.commandEnabled),
+        },
+        { method: 'POST' }
+      );
     },
   });
 
+  const { language, command, commandEnabled } = settings;
   useEffect(() => {
-    form.reset({ language });
-  }, [language]);
+    form.reset({ language, command, commandEnabled });
+  }, [language, command, commandEnabled]);
 
   useEffect(() => {
     if (fetcher.state !== 'idle' || !fetcher.data) return;
@@ -273,6 +304,62 @@ function LingualSettingsForm({
               </FieldDescription>
             )}
           </Field>
+        )}
+      />
+      <form.Field
+        name="commandEnabled"
+        children={(field) => (
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <FieldLabel htmlFor="lingual-command-enabled">
+                Translate command
+              </FieldLabel>
+              <FieldDescription>
+                Anyone in chat can ask for a translation, like{' '}
+                <code className="bg-muted px-1 rounded">
+                  {form.state.values.command || '!tr'} spanish good morning
+                </code>
+                . Lingual ignores every other message that starts with !.
+              </FieldDescription>
+            </div>
+            <Switch
+              id="lingual-command-enabled"
+              checked={field.state.value}
+              onCheckedChange={(checked) => field.handleChange(checked)}
+            />
+          </div>
+        )}
+      />
+      <form.Subscribe
+        selector={(state) => state.values.commandEnabled}
+        children={(commandEnabled) => (
+          <form.Field
+            name="command"
+            validators={{
+              onSubmit: ({ value }) =>
+                isValidTranslateCommand(value) ? undefined : COMMAND_ERROR,
+            }}
+            children={(field) => (
+              <Field>
+                <FieldLabel htmlFor="lingual-command">Command</FieldLabel>
+                <Input
+                  id="lingual-command"
+                  autoComplete="off"
+                  placeholder="!tr"
+                  maxLength={25}
+                  disabled={!commandEnabled}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]}
+                  </p>
+                )}
+              </Field>
+            )}
+          />
         )}
       />
       <div className="flex justify-end">
@@ -359,8 +446,8 @@ export default function BotsLingual() {
             <CardContent className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
               {!loaderData.language && (
                 <p>
-                  Pick your language below. Lingual stays quiet until one is
-                  set.
+                  Pick your language below. Until one is set, Lingual only
+                  answers the translate command.
                 </p>
               )}
               <p>
@@ -411,7 +498,11 @@ export default function BotsLingual() {
             </CardHeader>
             <CardContent>
               <LingualSettingsForm
-                language={loaderData.language}
+                settings={{
+                  language: loaderData.language,
+                  command: loaderData.command,
+                  commandEnabled: loaderData.commandEnabled,
+                }}
                 botLogin={loaderData.botLogin}
               />
             </CardContent>

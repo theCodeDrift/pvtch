@@ -1,3 +1,4 @@
+import type { TranslateRequest } from '@pvtch/shared/lingual-command';
 import type {
   ChatFragment,
   ChatMessageEvent,
@@ -7,7 +8,7 @@ import { v2ConfigFromEnv, type V2Config } from './config-v2';
 import { targetLanguageProbability } from './detector-v2';
 import { describeOpenRouterError, openRouterClient } from './openrouter';
 import { URL_RE, preprocess, textFromFragments } from './preprocess';
-import { translateV2 } from './translator-v2';
+import { translateRequestedV2, translateV2 } from './translator-v2';
 
 /** Twitch's chat message length limit. */
 export const MAX_REPLY_LENGTH = 500;
@@ -178,4 +179,45 @@ export async function translateChatMessageV2(
   );
   if (reply) return { kind: 'reply', reply };
   return FAILED_OUTCOMES.has(outcome) ? { kind: 'failed' } : { kind: 'quiet' };
+}
+
+/**
+ * Translate what a chatter asked for with the translate command. No
+ * detection: the chatter chose the language. Quiet when only @usernames
+ * would be left, failed when the model call failed.
+ */
+export async function translateRequestV2(
+  env: Env,
+  request: TranslateRequest
+): Promise<ChatTranslation> {
+  let config: V2Config;
+  try {
+    config = v2ConfigFromEnv(env);
+  } catch (error) {
+    console.error('Lingual v2 config is invalid', error);
+    return { kind: 'failed' };
+  }
+
+  let translation: string;
+  try {
+    translation = await translateRequestedV2(
+      openRouterClient(env),
+      request.text,
+      request.language,
+      {
+        model: config.translatorModel,
+        disableThinking: config.translatorDisableThinking,
+      }
+    );
+  } catch (error) {
+    console.error(
+      'Lingual v2 requested translate failed',
+      describeOpenRouterError(error)
+    );
+    return { kind: 'failed' };
+  }
+  console.log('Lingual v2 requested translation', { ...request, translation });
+
+  const reply = formatReply(translation);
+  return reply ? { kind: 'reply', reply } : { kind: 'quiet' };
 }

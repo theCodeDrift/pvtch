@@ -1,4 +1,5 @@
 import { isKnownBot } from '@pvtch/shared/known-bots';
+import { parseTranslateCommand } from '@pvtch/shared/lingual-command';
 import { ack, retryIn, type Outcome } from '@pvtch/shared/queue-outcome';
 import {
   CHAT_MESSAGE_TYPE,
@@ -10,7 +11,11 @@ import type {
 } from '@pvtch/shared/twitch-queue';
 
 import { messageKey } from './lingo/message-key';
-import { translateChatMessageV2 } from './lingo/pipeline-v2';
+import {
+  translateChatMessageV2,
+  translateRequestV2,
+  type ChatTranslation,
+} from './lingo/pipeline-v2';
 
 /** A translation this late is noise; chat has moved on. pvtch-twitch checks
  * again before sending. */
@@ -79,17 +84,26 @@ export async function handleLingualEvent(
   }
 
   const text = event.message.text.trim();
-  if (
-    text.length === 0 ||
-    text.startsWith('!') ||
-    isKnownBot(event.chatter_user_login)
-  ) {
-    return ack;
-  }
+  if (text.length === 0 || isKnownBot(event.chatter_user_login)) return ack;
 
   using lingual = await channel.lingual();
   const settings = await lingual.getSettings();
-  if (!settings.language) return ack;
+
+  // `!` starts a command for another bot or the streamer's own tools, so
+  // only Lingual's translate command gets past this; nothing else reaches a
+  // model. The command needs no channel language: the chatter names one.
+  let translate: () => Promise<ChatTranslation>;
+  if (text.startsWith('!')) {
+    const request = settings.commandEnabled
+      ? parseTranslateCommand(text, settings.command)
+      : undefined;
+    if (!request) return ack;
+    translate = () => translateRequestV2(env, request);
+  } else {
+    const { language } = settings;
+    if (!language) return ack;
+    translate = () => translateChatMessageV2(env, event, language);
+  }
 
   const key = await messageKey(event.message.fragments);
 
@@ -113,7 +127,7 @@ export async function handleLingualEvent(
     if (!(await cache.firstSeen(key, delivery.id))) return ack;
   }
 
-  const result = await translateChatMessageV2(env, event, settings.language);
+  const result = await translate();
   if (result.kind === 'failed') {
     const outcome = retryWhileFresh(message, now);
     // Giving up without a reply: the retry was skipped as too late, or this
