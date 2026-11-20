@@ -58,7 +58,6 @@ export interface TestEnv {
   env: Env;
   channel: (id: string) => FakeChannel;
   send: ReturnType<typeof vi.fn>;
-  ai: ReturnType<typeof vi.fn>;
 }
 
 export function createTestEnv(): TestEnv {
@@ -72,19 +71,17 @@ export function createTestEnv(): TestEnv {
     return found;
   };
   const send = vi.fn(() => Promise.resolve());
-  const ai = vi.fn();
 
   const env = {
     ...V2_VARS,
     TWITCH_EVENTS: { send },
-    AI: { run: ai },
     TWITCH_CHANNEL: {
       idFromName: (name: string) => name,
       get: (name: string) => channel(name.slice('twitch:'.length)),
     },
   } as unknown as Env;
 
-  return { env, channel, send, ai };
+  return { env, channel, send };
 }
 
 export function chatEvent(
@@ -125,13 +122,4 @@ export function handlerEvent(
     flags: [],
     ...overrides,
   };
-}
-
-/** Workers AI response carrying the translator's JSON. */
-export function aiResponse(data: {
-  detected: string;
-  detectedCode: string;
-  translation: string;
-}) {
-  return { choices: [{ message: { content: JSON.stringify(data) } }] };
 }

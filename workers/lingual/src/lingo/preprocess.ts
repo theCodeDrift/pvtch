@@ -1,4 +1,4 @@
-// The bot's own copy of lingo detection, started from
+// The bot's own copy of lingo preprocessing, started from
 // workers/core/app/lib/lang-detect. It changes independently of the
 // /lingo/translate endpoint; don't import from workers/core.
 
@@ -11,7 +11,7 @@ const MENTION_RE = /@[a-z0-9_]{1,25}/gi;
 //   - 3+ consecutive uppercase letters (LULW, KEKW, OMEGALUL), or
 //   - an internal capital transition (PogChamp, monkaW, peepoSad, 4Head)
 // A single leading capital (Hello, World) is NOT treated as an emote so normal
-// sentence-initial words survive the gibberish gate.
+// sentence-initial words survive.
 const EMOTE_ALL_CAPS_RE = /^[A-Z][A-Z0-9]{2,}$/;
 const EMOTE_INTERNAL_CAP_RE = /[a-z0-9][A-Z]/;
 
@@ -23,8 +23,8 @@ function isEmoteToken(token: string): boolean {
 
 // Natural language essentially never has 3+ consecutive identical letters but
 // stream chat does constantly ("yeeesss", "haiiiiii", "atissssssssssaaaaa").
-// Collapsing 3+ runs to 2 chars shrinks these reaction-style inputs below the
-// gibberish-length gate while preserving legitimate doubles like "bookkeeper",
+// Collapsing 3+ runs to 2 chars normalizes these reaction-style inputs (so
+// repeats match) while preserving legitimate doubles like "bookkeeper",
 // "Hawaii", "Mississippi". The `u` flag keeps the regex codepoint-aware so
 // CJK and other non-BMP characters don't get split mid-character.
 const REPEATED_CHAR_RUN_RE = /(.)\1{2,}/gu;
@@ -40,16 +40,6 @@ export function preprocess(input: string): string {
     kept.push(token);
   }
   return collapseRepeats(kept.join(' ').trim());
-}
-
-const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, {
-  granularity: 'grapheme',
-});
-
-export function graphemeLength(input: string): number {
-  let count = 0;
-  for (const _ of GRAPHEME_SEGMENTER.segment(input)) count++;
-  return count;
 }
 
 /**

@@ -4,8 +4,8 @@
  *   GET  /      the form
  *   GET  /evals      the v2 eval table
  *   POST /evals/run  { text, emotes, config } → the v2 trace; never posts to Twitch
- *   POST /send  { broadcasterId, text, flow } → a fake chat message on
- *               lingual-events, sent through translation flow v1 or v2
+ *   POST /send  { broadcasterId, text } → a fake chat message on
+ *               lingual-events
  *
  * From the queue on it's production code: pvtch-lingual translates and
  * pvtch-twitch posts as pvtchbot. The result shows up in Twitch chat and in
@@ -17,7 +17,7 @@ import type { ChatMessageEvent } from '@pvtch/shared/twitch-eventsub';
 import type { HandlerEventMessage } from '@pvtch/shared/twitch-queue';
 import { z } from 'zod';
 
-import { NO_THREAD_FLAG, TRANSLATE_V2_FLAG } from '../handler';
+import { NO_THREAD_FLAG } from '../handler';
 import { openRouterClient } from '../lingo/openrouter';
 import { modelId, v2ConfigFromEnv, type V2Config } from '../lingo/config-v2';
 import { traceChatMessageV2, type V2Outcome } from '../lingo/pipeline-v2';
@@ -34,7 +34,6 @@ type HarnessEnv = Env & { LINGUAL_EVENTS: Queue };
 const sendBody = z.object({
   broadcasterId: z.string().regex(/^\d+$/),
   text: z.string().trim().min(1).max(500),
-  flow: z.enum(['v1', 'v2']),
 });
 
 const evalBody = z.object({
@@ -98,7 +97,7 @@ export function chatEvent(
 async function send(request: Request, env: HarnessEnv): Promise<Response> {
   const body = sendBody.safeParse(await request.json());
   if (!body.success) return Response.json(body.error, { status: 400 });
-  const { broadcasterId, text, flow } = body.data;
+  const { broadcasterId, text } = body.data;
 
   const channel = env.TWITCH_CHANNEL.get(
     env.TWITCH_CHANNEL.idFromName(`twitch:${broadcasterId}`)
@@ -116,8 +115,7 @@ async function send(request: Request, env: HarnessEnv): Promise<Response> {
     subscriptionType: CHAT_MESSAGE_TYPE,
     timestamp: Date.now(),
     event: chatEvent(broadcasterId, text, messageId),
-    flags:
-      flow === 'v2' ? [NO_THREAD_FLAG, TRANSLATE_V2_FLAG] : [NO_THREAD_FLAG],
+    flags: [NO_THREAD_FLAG],
   };
   await env.LINGUAL_EVENTS.send(routed);
   return Response.json({ queued: true, messageId });

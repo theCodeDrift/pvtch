@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { preprocess, graphemeLength } from '../../src/lingo/preprocess';
+import { preprocess, textFromFragments } from '../../src/lingo/preprocess';
 
 describe('preprocess', () => {
   it('strips http and https URLs', () => {
@@ -55,21 +55,22 @@ describe('preprocess', () => {
   });
 });
 
-describe('graphemeLength', () => {
-  it('counts ASCII characters', () => {
-    expect(graphemeLength('hello')).toBe(5);
+describe('fragment-based detection input', () => {
+  it('drops native emote and mention fragments', () => {
+    expect(
+      preprocess(
+        textFromFragments([
+          { type: 'mention', text: '@bob' },
+          { type: 'text', text: ' hola amigo ' },
+          { type: 'emote', text: 'Kappa' },
+        ])
+      )
+    ).toBe('hola amigo');
   });
 
-  it('counts multi-codepoint emoji as one grapheme', () => {
-    // Family emoji is a ZWJ sequence
-    expect(graphemeLength('👨‍👩‍👧')).toBe(1);
-  });
-
-  it('counts CJK characters individually', () => {
-    expect(graphemeLength('안녕하세요')).toBe(5);
-  });
-
-  it('returns 0 for empty string', () => {
-    expect(graphemeLength('')).toBe(0);
+  it('still strips third-party emotes that arrive as text', () => {
+    expect(
+      preprocess(textFromFragments([{ type: 'text', text: 'KEKW que risa' }]))
+    ).toBe('que risa');
   });
 });

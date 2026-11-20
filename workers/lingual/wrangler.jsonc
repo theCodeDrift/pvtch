@@ -25,12 +25,8 @@
     "enabled": true,
   },
 
-  "ai": {
-    "binding": "AI",
-  },
-
   /**
-   * The v2 translation flow, used by channels with lingual.translate-v2.
+   * The translation flow (v2, OpenRouter).
    *   DETECTOR_API              "decisions" for decisions models, else "chat"
    *   DETECTOR_MODEL            provider/model
    *   MAX_TARGET_PROBABILITY    translate at or below this score that the
