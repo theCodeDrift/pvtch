@@ -115,10 +115,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const resolved = findSupportedTargetLanguage(languageInput);
 
   // Grandfather existing users: if their stored value isn't on the curated
-  // supported list but IS a recognized ISO 639 language, accept it. The
-  // pipeline will fall back to LLM-only mode (no classifier supports the
-  // target, so decide() short-circuits to TRANSLATE), preserving the user's
-  // prior behavior. Only fail when the value is genuinely unrecognized.
+  // supported list but IS a recognized ISO 639 language, keep it so saving
+  // the form doesn't reject a value they already had. Only fail when the
+  // value is genuinely unrecognized.
   let language: string;
   if (resolved) {
     language = resolved.name;

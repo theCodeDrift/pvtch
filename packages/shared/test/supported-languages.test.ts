@@ -6,28 +6,22 @@ import {
 } from '../src/supported-languages';
 
 describe('SUPPORTED_TARGET_LANGUAGES', () => {
-  it('contains entries from both tiers', () => {
-    const tiers = new Set(SUPPORTED_TARGET_LANGUAGES.map((l) => l.tier));
-    expect(tiers.has('ensemble')).toBe(true);
-    expect(tiers.has('llm-only')).toBe(true);
-  });
-
   it('is sorted by name', () => {
     const names = SUPPORTED_TARGET_LANGUAGES.map((l) => l.name);
     const sorted = [...names].sort((a, b) => a.localeCompare(b));
     expect(names).toEqual(sorted);
   });
 
-  it('includes English in the ensemble tier', () => {
-    const eng = SUPPORTED_TARGET_LANGUAGES.find((l) => l.name === 'english');
-    expect(eng).toBeDefined();
-    expect(eng?.tier).toBe('ensemble');
+  it('includes English and Korean', () => {
+    const names = SUPPORTED_TARGET_LANGUAGES.map((l) => l.name);
+    expect(names).toEqual(expect.arrayContaining(['english', 'korean']));
   });
 
-  it('includes Korean as an llm-only target', () => {
-    const kor = SUPPORTED_TARGET_LANGUAGES.find((l) => l.name === 'korean');
-    expect(kor).toBeDefined();
-    expect(kor?.tier).toBe('llm-only');
+  it('resolves individual-language codes to their macrolanguage', () => {
+    const names = SUPPORTED_TARGET_LANGUAGES.map((l) => l.name);
+    expect(names).toEqual(
+      expect.arrayContaining(['chinese', 'persian', 'norwegian'])
+    );
   });
 });
 
@@ -53,8 +47,8 @@ describe('findSupportedTargetLanguage', () => {
   });
 
   it('returns undefined for unsupported languages', () => {
-    // Klingon is in the LANGUAGES universe (it's in tinyld) but deliberately
-    // not on the supported-target list.
+    // Klingon is in the LANGUAGES universe but deliberately not on the
+    // supported-target list.
     expect(findSupportedTargetLanguage('klingon')).toBeUndefined();
     expect(findSupportedTargetLanguage('tlh')).toBeUndefined();
   });

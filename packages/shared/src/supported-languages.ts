@@ -1,45 +1,44 @@
 import { LANGUAGES, normalizeLanguage, type LanguageEntry } from './languages';
 
 /**
- * Languages we allow users to configure as their Lingo target language.
+ * Languages a channel can pick as Lingual's target, and a chatter can name in
+ * the translate command.
  *
- * Two tiers:
- *
- * - **ensemble**: ISO 639-3 codes present in BOTH classifiers (tinyld/heavy
- *   intersection with franc-min). The K=2 skip-target rule can fire on these,
- *   so we get the cleanest cost wins and the most decisive diagnostics.
- * - **llm-only**: Major world languages where only one (or neither) classifier
- *   has coverage but the LLM handles them reliably. The K=1 translate path
- *   still works (a single confident non-target vote earns the LLM call), and
- *   the script gate still catches obvious mismatches; only the K=2 skip-target
- *   diagnostic path is unavailable.
- *
- * The list is intentionally curated, not exhaustive. The goal is a safety net
- * — preventing users from typing "klingon" or arbitrary text and getting
- * surprising LLM behavior — not to enumerate every language the LLM might
- * handle.
+ * Curated, not exhaustive: every entry goes through the same OpenRouter
+ * models, and the list only keeps targets those models translate into well.
+ * It is a safety net against typos and arbitrary text ("klingon") reaching
+ * the model as a language, not a list of everything a model might handle.
  */
-export type TargetLanguageTier = 'ensemble' | 'llm-only';
+export type SupportedTargetLanguage = LanguageEntry;
 
-export interface SupportedTargetLanguage extends LanguageEntry {
-  tier: TargetLanguageTier;
-}
-
-// Intersection of tinyld/heavy and franc-min (ISO 639-3 codes). Both
-// classifiers can identify these, so SKIP_TARGET (K=2) is achievable.
-const ENSEMBLE_CODES: ReadonlyArray<string> = [
+// ISO 639-3 codes. Individual-language codes such as `cmn`, `pes` and `nob`
+// resolve to their macrolanguage entry through normalizeLanguage.
+const SUPPORTED_CODES: ReadonlyArray<string> = [
+  'ara', // Arabic
   'bel', // Belarusian
+  'ben', // Bengali
   'bul', // Bulgarian
+  'cat', // Catalan
   'ces', // Czech
+  'cmn', // Mandarin Chinese
+  'dan', // Danish
   'deu', // German
+  'ell', // Greek
   'eng', // English
+  'fin', // Finnish
   'fra', // French
+  'heb', // Hebrew
   'hin', // Hindi
+  'hrv', // Croatian
   'hun', // Hungarian
   'ind', // Indonesian
   'ita', // Italian
+  'jpn', // Japanese
   'kaz', // Kazakh
+  'kor', // Korean
+  'msa', // Malay
   'nld', // Dutch
+  'nob', // Norwegian Bokmål
   'pes', // Persian
   'pol', // Polish
   'por', // Portuguese
@@ -48,36 +47,16 @@ const ENSEMBLE_CODES: ReadonlyArray<string> = [
   'rus', // Russian
   'spa', // Spanish
   'srp', // Serbian
+  'swa', // Swahili
   'swe', // Swedish
+  'tam', // Tamil
+  'tel', // Telugu
   'tgl', // Tagalog
+  'tha', // Thai
   'tur', // Turkish
   'ukr', // Ukrainian
   'urd', // Urdu
   'vie', // Vietnamese
-];
-
-// Curated additions: major world languages and stream-relevant targets where
-// the LLM has strong coverage even if classifier support is one-sided or
-// missing entirely. Some are in tinyld's vocabulary, some in franc-min's,
-// some in neither — the LLM is the source of truth for translation quality.
-const LLM_ONLY_CODES: ReadonlyArray<string> = [
-  'ara', // Arabic — tinyld
-  'ben', // Bengali — tinyld
-  'cat', // Catalan — neither classifier; LLM-only
-  'cmn', // Mandarin Chinese — tinyld
-  'dan', // Danish — tinyld
-  'ell', // Greek — tinyld
-  'fin', // Finnish — tinyld
-  'heb', // Hebrew — tinyld
-  'hrv', // Croatian — franc-min
-  'jpn', // Japanese — tinyld
-  'kor', // Korean — tinyld
-  'msa', // Malay — franc-min (returns 'zlm', aliased)
-  'nob', // Norwegian Bokmål — tinyld
-  'swa', // Swahili — franc-min (returns 'swh', aliased)
-  'tam', // Tamil — tinyld
-  'tel', // Telugu — tinyld
-  'tha', // Thai — tinyld
 ];
 
 function buildSupportedList(): SupportedTargetLanguage[] {
@@ -85,10 +64,7 @@ function buildSupportedList(): SupportedTargetLanguage[] {
   // resolve through normalizeLanguage's alias map to their macrolanguage
   // entries instead of being silently dropped.
   const byCanonical = new Map(LANGUAGES.map((l) => [l.name, l]));
-  const resolve = (
-    code: string,
-    tier: TargetLanguageTier
-  ): SupportedTargetLanguage => {
+  return SUPPORTED_CODES.map((code) => {
     const canonical = normalizeLanguage(code);
     const entry = byCanonical.get(canonical);
     if (!entry) {
@@ -97,13 +73,8 @@ function buildSupportedList(): SupportedTargetLanguage[] {
           `Add the macrolanguage alias in languages.ts or fix the code.`
       );
     }
-    return { ...entry, tier };
-  };
-
-  return [
-    ...ENSEMBLE_CODES.map((c) => resolve(c, 'ensemble')),
-    ...LLM_ONLY_CODES.map((c) => resolve(c, 'llm-only')),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+    return entry;
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export const SUPPORTED_TARGET_LANGUAGES: ReadonlyArray<SupportedTargetLanguage> =
