@@ -8,6 +8,7 @@ import {
   formatReply,
   traceChatMessageV2,
   translateChatMessageV2,
+  translateRequestV2,
 } from '../src/lingo/pipeline-v2';
 import { chatEvent, createTestEnv } from './helpers/fakes';
 
@@ -297,5 +298,52 @@ describe('translateChatMessageV2', () => {
         traceChatMessageV2(env, chatEvent(), 'english')
       ).resolves.toMatchObject({ error: 'Error: no such model' });
     });
+  });
+});
+
+describe('translateRequestV2', () => {
+  const { env } = createTestEnv();
+  const request = { language: 'english', text: 'hola amigos' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(openRouterClient).mockReturnValue({
+      alpha: { decisions: { create: decide } },
+      chat: { send },
+    } as unknown as OpenRouter);
+    send.mockResolvedValue(translation(spanishReply));
+  });
+
+  it('translates without asking the detector', async () => {
+    await expect(translateRequestV2(env, request)).resolves.toEqual({
+      kind: 'reply',
+      reply: 'hi friends, how is everyone tonight?',
+    });
+    expect(decide).not.toHaveBeenCalled();
+
+    const [{ chatRequest }] = send.mock.calls[0] as [
+      { chatRequest: { messages: { role: string; content: string }[] } },
+    ];
+    expect(chatRequest.messages[0]?.content).toContain(
+      'A chatter asked for this translation'
+    );
+    expect(chatRequest.messages[1]).toEqual({
+      role: 'user',
+      content: 'hola amigos',
+    });
+  });
+
+  it('stays quiet when only usernames are left', async () => {
+    send.mockResolvedValue(
+      translation(JSON.stringify({ translation: '@bob' }))
+    );
+    await expect(translateRequestV2(env, request)).resolves.toEqual(quiet);
+  });
+
+  it('fails when the translator fails', async () => {
+    send.mockRejectedValue(new Error('OpenRouter is down'));
+    await expect(translateRequestV2(env, request)).resolves.toEqual(failed);
   });
 });

@@ -22,7 +22,7 @@ The `pvtch-lingual` worker consumes the `lingual-events` queue and translates ch
 
 ### Requirement: Lingual handler flow
 
-For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, then skip without replying when any of: `chatter_user_login` is in `knownBots` (case-insensitive); `message.text` starts with `!`; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`. On its first attempt it SHALL also skip a message whose normalized text (no emotes, mentions or URLs, ignoring case, punctuation and spacing) `messageCache()` has already seen, keyed by a hash so the channel never holds chat text. Otherwise it SHALL run the OpenRouter translation flow and, on a translation, enqueue a `send` request. A thrown error SHALL retry the message.
+For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, then skip without replying when any of: `chatter_user_login` is in `knownBots` (case-insensitive); `message.text` starts with `!` and is not the channel's translate command; `source_broadcaster_user_id` is non-null and differs from `broadcaster_user_id`. On its first attempt it SHALL also skip a message whose normalized text (no emotes, mentions or URLs, ignoring case, punctuation and spacing) `messageCache()` has already seen, keyed by a hash so the channel never holds chat text. Otherwise it SHALL run the OpenRouter translation flow and, on a translation, enqueue a `send` request. A thrown error SHALL retry the message.
 
 #### Scenario: Repeated message
 
@@ -36,13 +36,27 @@ For each `lingual` handler message, `pvtch-lingual` SHALL apply handler dedupe, 
 
 #### Scenario: Command message
 
-- **WHEN** a chat message starting with `!` is handled
-- **THEN** no translation or `send` occurs
+- **WHEN** a chat message starting with `!` other than the translate command is handled
+- **THEN** no model is called and no `send` occurs
 
 #### Scenario: Shared Chat message from another channel
 
 - **WHEN** an event has `source_broadcaster_user_id: "999"` and `broadcaster_user_id: "123"`
 - **THEN** no translation or `send` occurs
+
+### Requirement: Translate command
+
+A channel's Lingual settings SHALL hold a translate command (default `!tr`: `!` and 1 to 24 letters, digits or underscores, matched case-insensitively) and a toggle for it (default on), both editable on the Lingual page. When the toggle is on, a message `<command> <language> <text>`, where `<language>` is a supported target language's name or ISO code, SHALL skip the decision model and translate `<text>` into that language with a prompt for requested translations, which works whatever the source language is. The channel's own target language SHALL NOT be required. The translation SHALL be sent as a reply like any other, and a failed model call SHALL retry. A command with an unsupported language or no text, or any command while the toggle is off, SHALL be skipped like other `!` messages.
+
+#### Scenario: Requested translation
+
+- **WHEN** a chatter sends `!tr es good morning chat` and the command is on
+- **THEN** no decision model is called and the Spanish translation of `good morning chat` is sent as a threaded reply
+
+#### Scenario: Command turned off
+
+- **WHEN** a chatter sends `!tr es good morning` and the command is off
+- **THEN** no model is called and no `send` occurs
 
 ### Requirement: Reply threading
 

@@ -11,6 +11,7 @@
     "./dead-letter": "./src/dead-letter.ts",
     "./known-bots": "./src/known-bots.ts",
     "./languages": "./src/languages.ts",
+    "./lingual-command": "./src/lingual-command.ts",
     "./queue-outcome": "./src/queue-outcome.ts",
     "./secrets": "./src/secrets.ts",
     "./session": "./src/session.ts",
