@@ -18,7 +18,6 @@ import {
 import {
   SUPPORTED_TARGET_LANGUAGES,
   findSupportedTargetLanguage,
-  type SupportedTargetLanguage,
 } from '@pvtch/shared/supported-languages';
 
 interface LanguageComboboxProps {
@@ -27,10 +26,6 @@ interface LanguageComboboxProps {
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
-}
-
-function tierLabel(tier: SupportedTargetLanguage['tier']): string {
-  return tier === 'ensemble' ? 'Best supported' : 'Limited accuracy';
 }
 
 export function LanguageCombobox({
@@ -113,9 +108,6 @@ export function LanguageCombobox({
                       <span className="flex-1 capitalize">{lang.name}</span>
                       <span className="ml-2 text-xs text-muted-foreground">
                         {lang.iso639_1} · {lang.iso639_3}
-                      </span>
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {tierLabel(lang.tier)}
                       </span>
                     </CommandItem>
                   );

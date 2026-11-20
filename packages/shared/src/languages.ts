@@ -213,9 +213,8 @@ for (const lang of LANGUAGES) {
 }
 
 // ISO 639-3 individual language codes that map to the macrolanguage names
-// already in LANGUAGES. Classifiers (franc-min especially) return the
-// individual codes; this keeps them comparable to user-supplied targets that
-// use the more common macrolanguage names/codes.
+// already in LANGUAGES, so a code like `cmn` (Mandarin) resolves to the
+// same entry as `zh` or "chinese".
 const MACROLANGUAGE_ALIASES: Record<string, string> = {
   zlm: 'malay', // Standard Malay → Malay
   swh: 'swahili', // Coastal Swahili → Swahili
