@@ -36,7 +36,12 @@ The system SHALL store per-user lingo configuration in a Durable Object with key
 
 ### Requirement: Lingo dashboard
 
-The system SHALL provide a dashboard page at `/helpers/lingo` where authenticated users can configure their target language and ignored bots list. The dashboard SHALL display the translate API URL (password-masked) with a copy button, and SHALL include setup guides with screenshots for Firebot, MixItUp, and placeholder tabs for Streamer.bot and custom integrations. It SHALL show a notice that Lingo is retired and link to Lingual.
+The system SHALL provide a page at `/helpers/lingo` that says Lingo was retired early, that its translate URL no longer translates, and that Lingo users will be upgraded automatically to a translation bot in development. It SHALL NOT link to Lingual, which is still in preview. Authenticated users SHALL still be able to view and save their target language and ignored bots list. The page SHALL NOT show the translate URL or chatbot setup guides.
+
+#### Scenario: Retirement notice
+
+- **WHEN** anyone visits `/helpers/lingo`
+- **THEN** the page shows the retirement notice without a link to Lingual
 
 #### Scenario: Authenticated user configures lingo
 

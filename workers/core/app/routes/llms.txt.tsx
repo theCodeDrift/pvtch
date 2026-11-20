@@ -17,7 +17,7 @@ Create customizable progress bars for OBS browser sources. Track sub goals, dona
 - Integration: OBS Browser Source
 
 ### Lingo Translator (retired)
-Retired; its translate API returns 410 Gone. Lingual (/bots/lingual) replaces it.
+Retired early; its translate API returns 410 Gone. A translation bot that Lingo users will be upgraded to automatically is in development.
 
 - URL: /helpers/lingo
 
