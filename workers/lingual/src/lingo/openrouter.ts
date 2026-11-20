@@ -1,9 +1,13 @@
-import { OpenRouter } from '@openrouter/sdk';
-import { OpenRouterError } from '@openrouter/sdk/models/errors';
+// The SDK's standalone functions, not the `OpenRouter` class: the class pulls
+// every endpoint's Zod schemas into the bundle and builds them at startup
+// (~1.6 MB and ~160 ms), enough to fail Cloudflare's startup CPU limit.
+// Never import a value from `@openrouter/sdk` itself; `import type` is fine.
+import { OpenRouterCore } from '@openrouter/sdk/core.js';
+import { OpenRouterError } from '@openrouter/sdk/models/errors/openroutererror.js';
 import { readSecret } from '@pvtch/shared/secrets';
 
-export function openRouterClient(env: Env): OpenRouter {
-  return new OpenRouter({
+export function openRouterClient(env: Env): OpenRouterCore {
+  return new OpenRouterCore({
     apiKey: () => readSecret(env.PVTCH_OPENROUTER_API_KEY),
     httpReferer: 'https://www.pvtch.com',
     appTitle: 'pvtch Lingual',

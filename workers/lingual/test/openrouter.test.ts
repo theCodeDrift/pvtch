@@ -1,4 +1,4 @@
-import { OpenRouterError } from '@openrouter/sdk/models/errors';
+import { OpenRouterError } from '@openrouter/sdk/models/errors/openroutererror.js';
 import { describe, expect, it } from 'vitest';
 
 import { describeOpenRouterError } from '../src/lingo/openrouter';

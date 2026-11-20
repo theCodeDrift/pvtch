@@ -1,4 +1,6 @@
-import type { OpenRouter } from '@openrouter/sdk';
+import type { OpenRouterCore } from '@openrouter/sdk/core.js';
+import { endpointsList } from '@openrouter/sdk/funcs/endpointsList.js';
+import { unwrapAsync } from '@openrouter/sdk/types/fp.js';
 
 export interface ModelSupport {
   structuredOutputs: boolean;
@@ -13,7 +15,7 @@ const cache = new Map<string, ModelSupport>();
 /** What an OpenRouter model's endpoints support. Asks per model rather than
  * reading the catalog, which leaves out unlisted models. */
 export async function modelSupport(
-  client: OpenRouter,
+  client: OpenRouterCore,
   model: string
 ): Promise<ModelSupport> {
   const cached = cache.get(model);
@@ -22,10 +24,9 @@ export async function modelSupport(
   // A variant such as `:free` shares its model's listing.
   const [id = model] = model.split(':');
   const [author = '', ...slug] = id.split('/');
-  const { data } = await client.endpoints.list({
-    author,
-    slug: slug.join('/'),
-  });
+  const { data } = await unwrapAsync(
+    endpointsList(client, { author, slug: slug.join('/') })
+  );
 
   const structured = data.endpoints
     .map(({ supportedParameters }) => supportedParameters as string[])

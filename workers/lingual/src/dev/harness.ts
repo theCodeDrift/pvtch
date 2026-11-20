@@ -11,7 +11,7 @@
  * pvtch-twitch posts as pvtchbot. The result shows up in Twitch chat and in
  * the terminal, not here.
  */
-import type { OpenRouter } from '@openrouter/sdk';
+import type { OpenRouterCore } from '@openrouter/sdk/core.js';
 import { CHAT_MESSAGE_TYPE } from '@pvtch/shared/twitch-eventsub';
 import type { ChatMessageEvent } from '@pvtch/shared/twitch-eventsub';
 import type { HandlerEventMessage } from '@pvtch/shared/twitch-queue';
@@ -126,7 +126,7 @@ type EvalPair = NonNullable<z.infer<typeof evalBody>['config']>;
 /** Turn thinking off only where a model supports it, since v2 requires
  * providers to honor every parameter it sends. */
 async function chatModelSettings(
-  client: OpenRouter,
+  client: OpenRouterCore,
   model: string
 ): Promise<{ disableThinking: boolean } | { error: string }> {
   try {
@@ -143,7 +143,7 @@ async function chatModelSettings(
 
 /** The pair's full config, or the stage that can't run and why. */
 async function resolvePair(
-  client: OpenRouter,
+  client: OpenRouterCore,
   pair: EvalPair
 ): Promise<V2Config | { outcome: V2Outcome; error: string }> {
   const detector =

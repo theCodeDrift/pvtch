@@ -1,7 +1,5 @@
-import type { OpenRouter } from '@openrouter/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { openRouterClient } from '../src/lingo/openrouter';
 import { v2ConfigFromEnv } from '../src/lingo/config-v2';
 import {
   MAX_REPLY_LENGTH,
@@ -12,10 +10,27 @@ import {
 } from '../src/lingo/pipeline-v2';
 import { chatEvent, createTestEnv } from './helpers/fakes';
 
-vi.mock('../src/lingo/openrouter');
-
-const decide = vi.fn();
-const send = vi.fn();
+// The SDK's standalone functions return a Result; `decide` and `send` resolve
+// or reject with the response, as the API would.
+const { decide, send, asResult } = vi.hoisted(() => ({
+  decide: vi.fn(),
+  send: vi.fn(),
+  asResult: async (call: Promise<unknown>) => {
+    try {
+      return { ok: true, value: await call };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  },
+}));
+vi.mock('@openrouter/sdk/funcs/alphaDecisionsCreate.js', () => ({
+  alphaDecisionsCreate: (_client: unknown, request: unknown) =>
+    asResult(decide(request) as Promise<unknown>),
+}));
+vi.mock('@openrouter/sdk/funcs/chatSend.js', () => ({
+  chatSend: (_client: unknown, request: unknown) =>
+    asResult(send(request) as Promise<unknown>),
+}));
 
 const noul = (value: number) => ({
   answers: { inTargetLanguage: { type: 'noul', noul: value } },
@@ -54,10 +69,6 @@ describe('translateChatMessageV2', () => {
     vi.clearAllMocks();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(openRouterClient).mockReturnValue({
-      alpha: { decisions: { create: decide } },
-      chat: { send },
-    } as unknown as OpenRouter);
     decide.mockResolvedValue(noul(0.02));
     send.mockResolvedValue(translation(spanishReply));
   });
@@ -331,10 +342,6 @@ describe('translateRequestV2', () => {
     vi.clearAllMocks();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(openRouterClient).mockReturnValue({
-      alpha: { decisions: { create: decide } },
-      chat: { send },
-    } as unknown as OpenRouter);
     send.mockResolvedValue(translation(spanishReply));
   });
 
