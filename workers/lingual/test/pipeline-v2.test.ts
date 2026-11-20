@@ -133,6 +133,28 @@ describe('translateChatMessageV2', () => {
     expect(JSON.stringify(send.mock.calls[0])).toContain(original);
   });
 
+  it('logs the original and cleaned text with the detection', async () => {
+    const original = '@bob hola amigos';
+    await translateEvent(
+      chatEvent({
+        message: {
+          text: original,
+          fragments: [
+            { type: 'mention', text: '@bob' },
+            { type: 'text', text: ' hola amigos' },
+          ],
+        },
+      })
+    );
+
+    expect(console.log).toHaveBeenCalledWith('Lingual v2 detection', {
+      targetLanguage: 'english',
+      probability: 0.02,
+      text: original,
+      cleaned: 'hola amigos',
+    });
+  });
+
   it('sends the translator no emotes or cheermotes', async () => {
     await translateEvent(
       chatEvent({

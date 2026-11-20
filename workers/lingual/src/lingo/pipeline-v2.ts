@@ -113,7 +113,12 @@ export async function traceChatMessageV2(
     );
     return { outcome: 'detection-failed', cleaned, error: String(error) };
   }
-  console.log('Lingual v2 detection', { targetLanguage, probability });
+  console.log('Lingual v2 detection', {
+    targetLanguage,
+    probability,
+    text: event.message.text,
+    cleaned,
+  });
   if (probability === undefined) {
     return { outcome: 'detection-failed', cleaned };
   }
