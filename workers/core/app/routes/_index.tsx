@@ -60,7 +60,7 @@ const features = [
     icon: Languages,
     title: 'Lingo Translator',
     description:
-      'AI-powered chat translation so your community can speak any language.',
+      'Retired early. A translation bot is on the way, and Lingo users will be upgraded automatically.',
     href: '/helpers/lingo',
   },
   {

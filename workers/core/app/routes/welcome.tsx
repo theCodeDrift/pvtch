@@ -75,8 +75,8 @@ export default function Welcome() {
           >
             <h3 className="font-medium">Lingo</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Automatic chat translation powered by AI. Let your community speak
-              any language and still be understood.
+              Retired early. A translation bot is on the way, and Lingo users
+              will be upgraded automatically.
             </p>
           </Link>
         </div>
