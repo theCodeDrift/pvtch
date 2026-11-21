@@ -113,4 +113,10 @@ export const twitchChannelMigrations: Migrations = {
       )
     `);
   },
+  6: (sql) => {
+    // Why pvtch turned a handler off (HandlerDisabledReason), so the
+    // dashboard can tell the streamer how to fix it. NULL when the
+    // streamer turned it off, or it is on.
+    sql.exec(`ALTER TABLE handlers ADD COLUMN disabled_reason TEXT`);
+  },
 };

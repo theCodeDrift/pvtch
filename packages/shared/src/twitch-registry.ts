@@ -77,3 +77,18 @@ export function handlersUsing(senderId: SenderId): HandlerId[] {
 export function isTrackedEventType(type: string): boolean {
   return CHANNEL_EVENT_TYPES.includes(type) || handlersFor(type).length > 0;
 }
+
+/**
+ * Why pvtch turned a handler off, rather than the streamer.
+ *   sender_not_allowed  Twitch refused the sender in the channel (a 403 on
+ *                       subscribe or send, or a revoked authorization). In
+ *                       practice the fix is making the sender a moderator.
+ */
+export const HANDLER_DISABLED_REASONS = ['sender_not_allowed'] as const;
+export type HandlerDisabledReason = (typeof HANDLER_DISABLED_REASONS)[number];
+
+export function isHandlerDisabledReason(
+  value: string
+): value is HandlerDisabledReason {
+  return (HANDLER_DISABLED_REASONS as readonly string[]).includes(value);
+}

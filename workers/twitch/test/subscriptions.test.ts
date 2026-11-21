@@ -146,7 +146,7 @@ describe('subscription sync', () => {
       expect(record()?.subscriptionId).toBe('s-existing');
     });
 
-    it("disables the sender's handlers on a 403", async () => {
+    it("disables the sender's handlers on a 403 and records why", async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch(
         appTokenRoute,
@@ -161,6 +161,9 @@ describe('subscription sync', () => {
         type: 'ack',
       });
       expect(t.channel(BROADCASTER_ID).listHandlers()).toEqual([]);
+      expect(
+        t.channel(BROADCASTER_ID).getHandler('lingual').disabledReason
+      ).toBe('sender_not_allowed');
     });
 
     it('makes no Helix writes for a healthy subscription', async () => {
