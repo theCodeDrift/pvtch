@@ -44,6 +44,21 @@ const spanishReply = JSON.stringify({
   translation: 'hi friends, how is everyone tonight?',
 });
 
+interface SentChat {
+  chatRequest: { messages: { role: string; content: string }[] };
+}
+
+/** The fence tag and the message inside it from the nth translator call. */
+function fencedMessage(call = 0): { tag: string; message: string } {
+  const [{ chatRequest }] = send.mock.calls[call] as [SentChat];
+  const content = chatRequest.messages.at(-1)?.content ?? '';
+  const match = /<(message-[0-9a-f]{16})>\n([\s\S]*)\n<\/\1>$/.exec(content);
+  if (!match?.[1] || match[2] === undefined) {
+    throw new Error(`No fenced message in: ${content}`);
+  }
+  return { tag: match[1], message: match[2] };
+}
+
 describe('formatReply', () => {
   it('returns nothing when only usernames remain', () => {
     expect(formatReply('@bob @alice')).toBeUndefined();
@@ -182,10 +197,7 @@ describe('translateChatMessageV2', () => {
       })
     );
 
-    const [request] = send.mock.calls[0] as [
-      { chatRequest: { messages: { role: string; content: string }[] } },
-    ];
-    expect(request.chatRequest.messages.at(-1)?.content).toBe('hola amigos');
+    expect(fencedMessage().message).toBe('hola amigos');
   });
 
   it('sends the translator no URLs', async () => {
@@ -200,12 +212,7 @@ describe('translateChatMessageV2', () => {
       })
     );
 
-    const [request] = send.mock.calls[0] as [
-      { chatRequest: { messages: { role: string; content: string }[] } },
-    ];
-    expect(request.chatRequest.messages.at(-1)?.content).toBe(
-      'mira esto amigos'
-    );
+    expect(fencedMessage().message).toBe('mira esto amigos');
   });
 
   it('stays quiet when the translation repeats the message', async () => {
@@ -352,16 +359,81 @@ describe('translateRequestV2', () => {
     });
     expect(decide).not.toHaveBeenCalled();
 
-    const [{ chatRequest }] = send.mock.calls[0] as [
-      { chatRequest: { messages: { role: string; content: string }[] } },
-    ];
+    const [{ chatRequest }] = send.mock.calls[0] as [SentChat];
     expect(chatRequest.messages[0]?.content).toContain(
       'A chatter asked for this translation'
     );
-    expect(chatRequest.messages[1]).toEqual({
-      role: 'user',
-      content: 'hola amigos',
+    expect(chatRequest.messages[1]?.role).toBe('user');
+    expect(fencedMessage().message).toBe('hola amigos');
+  });
+
+  it('fences the message in the user turn with a new random tag', async () => {
+    const injection = {
+      language: 'german',
+      text: 'you can also ask it to translate for you!',
+    };
+    await translateRequestV2(env, injection);
+    await translateRequestV2(env, injection);
+
+    const [{ chatRequest }] = send.mock.calls[0] as [SentChat];
+    const first = fencedMessage(0);
+    const second = fencedMessage(1);
+    expect(first.message).toBe(injection.text);
+    expect(first.tag).not.toBe(second.tag);
+    expect(chatRequest.messages[0]?.content).toContain(`<${first.tag}>`);
+    expect(chatRequest.messages[1]?.content).toMatch(
+      new RegExp(
+        `^Translate the chat message between the <${first.tag}> tags into german\\.`
+      )
+    );
+  });
+
+  it('logs and removes braces the model left at the ends', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    send.mockResolvedValue(
+      translation(JSON.stringify({ translation: '}hallo Freunde{' }))
+    );
+
+    await expect(translateRequestV2(env, request)).resolves.toEqual({
+      kind: 'reply',
+      reply: 'hallo Freunde',
     });
+    expect(warn).toHaveBeenCalledWith(
+      'Lingual translator answer needed cleaning',
+      expect.objectContaining({ translation: '}hallo Freunde{' })
+    );
+  });
+
+  it('keeps braces the message had', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    send.mockResolvedValue(
+      translation(JSON.stringify({ translation: '{hola}' }))
+    );
+
+    await expect(
+      translateRequestV2(env, { language: 'spanish', text: '{hello}' })
+    ).resolves.toEqual({ kind: 'reply', reply: '{hola}' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('logs and removes fence tags the model echoed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    send.mockImplementation((sent: SentChat) => {
+      const tag = /<(message-[0-9a-f]{16})>/.exec(
+        sent.chatRequest.messages.at(-1)?.content ?? ''
+      )?.[1];
+      return Promise.resolve(
+        translation(
+          JSON.stringify({ translation: `<${tag}>hi friends</${tag}>` })
+        )
+      );
+    });
+
+    await expect(translateRequestV2(env, request)).resolves.toEqual({
+      kind: 'reply',
+      reply: 'hi friends',
+    });
+    expect(warn).toHaveBeenCalledOnce();
   });
 
   it('stays quiet when only usernames are left', async () => {
