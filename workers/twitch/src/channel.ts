@@ -7,8 +7,10 @@ export function channelStub(env: Env, broadcasterId: string) {
   );
 }
 
-/** A sender lost its authorization in a channel: turn off every handler
- * that posts as it. Each disable schedules the sender's subscription sync. */
+/** Twitch refused a sender in a channel (a 403, or a revoked
+ * authorization): turn off every handler that posts as it, recording
+ * `sender_not_allowed` so the dashboard asks the streamer to mod the
+ * sender. Each disable schedules the sender's subscription sync. */
 export async function disableSenderHandlers(
   env: Env,
   broadcasterId: string,
@@ -16,6 +18,6 @@ export async function disableSenderHandlers(
 ): Promise<void> {
   const channel = channelStub(env, broadcasterId);
   for (const handlerId of handlersUsing(senderId)) {
-    await channel.disableHandler(handlerId);
+    await channel.disableHandler(handlerId, 'sender_not_allowed');
   }
 }
