@@ -49,7 +49,7 @@ For local development, follow `.dev.vars.example` to put both secrets in Wrangle
 4. Deploy (see below). The custom domain `twitch.pvtch.com` comes from `routes` in `wrangler.jsonc`.
 5. Log into Twitch **as the bot account**, sign in to www with it, then open `https://twitch.pvtch.com/bot/authorize?sender=pvtchbot`. This grants the bot `user:bot user:read:chat user:write:chat`. Sign in to www first: without a www session as the bot (or an `ADMIN_USERS` login), the page returns an empty 403.
 6. Open `https://twitch.pvtch.com/admin/bootstrap` and press the button. This creates the app-wide `user.authorization.revoke` subscription.
-7. A user in `LINGUAL_PREVIEW_USERS` (a `pvtch` var) opens Bots → Lingual on www and turns it on.
+7. A user in `LINGUAL_PREVIEW_USERS` (a `pvtch` var) runs `/mod pvtchbot` in their chat, then opens Bots → Lingual on www and turns it on. Without the mod, Twitch refuses the chat subscription with a 403: the handler turns off with `disabledReason: 'sender_not_allowed'`, and the page asks for the mod.
 
 ## Deploy order
 

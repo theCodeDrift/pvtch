@@ -7,13 +7,21 @@ import {
   useFetcher,
   useLoaderData,
   useNavigation,
+  useRevalidator,
 } from 'react-router';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { isValidTranslateCommand } from '@pvtch/shared/lingual-command';
 import { findSupportedTargetLanguage } from '@pvtch/shared/supported-languages';
 import { TWITCH_HANDLERS, TWITCH_SENDERS } from '@pvtch/shared/twitch-registry';
-import { Bot, CheckCircle, Clock, Loader, XCircle } from 'lucide-react';
+import {
+  Bot,
+  CheckCircle,
+  Clock,
+  Loader,
+  ShieldAlert,
+  XCircle,
+} from 'lucide-react';
 import type { Route } from './+types/bots.lingual';
 import {
   cloudflareEnvironmentContext,
@@ -47,6 +55,11 @@ import {
 
 const CHAT_SUBSCRIPTION = 'channel.chat.message';
 const LINGUAL_SENDER = TWITCH_HANDLERS.lingual.sender;
+
+/** While Lingual is connecting, reload the page's data this often, for at
+ * most this long, so a refusal from Twitch shows up without a reload. */
+const CONNECTING_POLL_MS = 3000;
+const CONNECTING_POLL_LIMIT_MS = 60_000;
 
 const COMMAND_ERROR =
   'A command is ! and up to 24 letters, numbers or underscores, like !tr.';
@@ -124,6 +137,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     {
       state: 'ready' as const,
       enabled: handler.enabled,
+      needsModerator: handler.disabledReason === 'sender_not_allowed',
       subscriptionStatus: subscription?.status ?? undefined,
       language: settings.language ?? '',
       command: settings.command,
@@ -188,13 +202,28 @@ export async function action({ request, context }: Route.ActionArgs) {
   return data({ error: 'Unknown action' }, { status: 400 });
 }
 
+function isConnecting(
+  status: string | undefined
+): status is undefined | 'webhook_callback_verification_pending' {
+  return !status || status === 'webhook_callback_verification_pending';
+}
+
 function StatusBadge({
   enabled,
+  needsModerator,
   status,
 }: {
   enabled: boolean;
+  needsModerator: boolean;
   status: string | undefined;
 }) {
+  if (!enabled && needsModerator) {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <ShieldAlert className="size-3" /> Needs moderator
+      </Badge>
+    );
+  }
   if (!enabled) {
     return (
       <Badge variant="secondary" className="gap-1">
@@ -209,7 +238,7 @@ function StatusBadge({
       </Badge>
     );
   }
-  if (!status || status === 'webhook_callback_verification_pending') {
+  if (isConnecting(status)) {
     return (
       <Badge variant="outline" className="gap-1">
         <Clock className="size-3" /> Connecting
@@ -380,6 +409,27 @@ export default function BotsLingual() {
 
   const justEnabled =
     loaderData.state === 'ready' ? loaderData.justEnabled : false;
+  const connecting =
+    loaderData.state === 'ready' &&
+    loaderData.enabled &&
+    isConnecting(loaderData.subscriptionStatus);
+  const revalidator = useRevalidator();
+
+  // Turning Lingual on only queues the subscription; Twitch answers a few
+  // seconds later. Poll for a while so "Live", or a refusal that turns it
+  // back off, appears without a reload.
+  useEffect(() => {
+    if (!connecting) return;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - started > CONNECTING_POLL_LIMIT_MS) {
+        clearInterval(timer);
+        return;
+      }
+      void revalidator.revalidate();
+    }, CONNECTING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [connecting]);
   const grantError =
     loaderData.state === 'ready' ? loaderData.grantError : undefined;
 
@@ -432,6 +482,7 @@ export default function BotsLingual() {
                 <CardTitle>Your channel</CardTitle>
                 <StatusBadge
                   enabled={loaderData.enabled}
+                  needsModerator={loaderData.needsModerator}
                   status={loaderData.subscriptionStatus}
                 />
               </div>
@@ -444,6 +495,19 @@ export default function BotsLingual() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
+              {!loaderData.enabled && loaderData.needsModerator && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-destructive/50 p-3 text-destructive"
+                >
+                  Twitch didn&apos;t let @{loaderData.botLogin} into your chat,
+                  so Lingual turned off. Run{' '}
+                  <code className="bg-muted px-1 rounded">
+                    /mod {loaderData.botLogin}
+                  </code>{' '}
+                  in your chat, then turn Lingual on again.
+                </div>
+              )}
               {!loaderData.language && (
                 <p>
                   Pick your language below. Until one is set, Lingual only
@@ -451,11 +515,15 @@ export default function BotsLingual() {
                 </p>
               )}
               <p>
-                Run{' '}
+                <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                  Before you turn it on:
+                </span>{' '}
+                run{' '}
                 <code className="bg-muted px-1 rounded">
                   /mod {loaderData.botLogin}
                 </code>{' '}
-                so it can reply faster in busy chats
+                in your chat. Twitch only lets Lingual read and reply in your
+                chat as a moderator, and it can reply faster in busy chats.
               </p>
             </CardContent>
             <CardFooter>
