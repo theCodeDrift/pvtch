@@ -9,6 +9,7 @@ import {
   HANDLER_IDS,
   TWITCH_HANDLERS,
   TWITCH_SENDERS,
+  type HandlerDisabledReason,
   type HandlerId,
   type SenderId,
 } from '@pvtch/shared/twitch-registry';
@@ -43,18 +44,29 @@ export class FakeChannel {
   };
   subscriptions = new Map<string, Record_>();
 
+  disabledReasons = new Map<HandlerId, HandlerDisabledReason>();
+
   getHandler(id: HandlerId) {
-    return { enabled: this.handlers.has(id), enabledAt: null, updatedAt: null };
+    return {
+      enabled: this.handlers.has(id),
+      enabledAt: null,
+      updatedAt: null,
+      disabledReason: this.disabledReasons.get(id) ?? null,
+    };
   }
   listHandlers() {
     return HANDLER_IDS.filter((id) => this.handlers.has(id));
   }
   enableHandler(id: HandlerId) {
     this.handlers.add(id);
+    this.disabledReasons.delete(id);
     return this.getHandler(id);
   }
-  disableHandler(id: HandlerId) {
+  disableHandler(id: HandlerId, reason?: HandlerDisabledReason) {
+    if (reason && !this.handlers.has(id)) return this.getHandler(id);
     this.handlers.delete(id);
+    if (reason) this.disabledReasons.set(id, reason);
+    else this.disabledReasons.delete(id);
     return this.getHandler(id);
   }
   getSubscription(senderId: SenderId, type: string) {

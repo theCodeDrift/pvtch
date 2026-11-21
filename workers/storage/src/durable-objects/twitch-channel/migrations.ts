@@ -104,4 +104,10 @@ export const twitchChannelMigrations: Migrations = {
     sql.exec(`ALTER TABLE message_claims ADD COLUMN owner TEXT`);
     sql.exec(`ALTER TABLE message_claims ADD COLUMN done_at INTEGER`);
   },
+  5: (sql) => {
+    // Why pvtch turned a handler off (HandlerDisabledReason), so the
+    // dashboard can tell the streamer how to fix it. NULL when the
+    // streamer turned it off, or it is on.
+    sql.exec(`ALTER TABLE handlers ADD COLUMN disabled_reason TEXT`);
+  },
 };

@@ -114,6 +114,8 @@ describe('TwitchChannel', () => {
         enabledAt: null,
         // eslint-disable-next-line unicorn/no-null -- RPC returns null
         updatedAt: null,
+        // eslint-disable-next-line unicorn/no-null -- RPC returns null
+        disabledReason: null,
       });
       expect(channel.listHandlers()).toEqual([]);
     });
@@ -130,8 +132,50 @@ describe('TwitchChannel', () => {
         enabled: false,
         enabledAt,
         updatedAt: enabledAt + 5000,
+        // eslint-disable-next-line unicorn/no-null -- RPC returns null
+        disabledReason: null,
       });
       expect(channel.listHandlers()).toEqual([]);
+    });
+
+    it('records why pvtch turned a handler off until it is turned on', () => {
+      channel.enableHandler('lingual');
+
+      channel.disableHandler('lingual', 'sender_not_allowed');
+      expect(channel.getHandler('lingual')).toMatchObject({
+        enabled: false,
+        disabledReason: 'sender_not_allowed',
+      });
+
+      channel.enableHandler('lingual');
+      expect(channel.getHandler('lingual').disabledReason).toBeNull();
+    });
+
+    it('clears the reason when the streamer turns it off', () => {
+      channel.enableHandler('lingual');
+      channel.disableHandler('lingual', 'sender_not_allowed');
+      channel.enableHandler('lingual');
+
+      channel.disableHandler('lingual');
+
+      expect(channel.getHandler('lingual').disabledReason).toBeNull();
+    });
+
+    it('a reasoned disable leaves a handler that is already off alone', () => {
+      channel.enableHandler('lingual');
+      channel.disableHandler('lingual');
+
+      channel.disableHandler('lingual', 'sender_not_allowed');
+
+      expect(channel.getHandler('lingual').disabledReason).toBeNull();
+    });
+
+    it('rejects an unknown reason', () => {
+      channel.enableHandler('lingual');
+      expect(() =>
+        channel.disableHandler('lingual', 'nope' as 'sender_not_allowed')
+      ).toThrow('Unknown disabled reason');
+      expect(channel.getHandler('lingual').enabled).toBe(true);
     });
 
     it('enabling an enabled handler keeps the original enable time', () => {

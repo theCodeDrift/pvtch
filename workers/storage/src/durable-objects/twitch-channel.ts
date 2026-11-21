@@ -4,8 +4,10 @@ import {
   CHANNEL_EVENT_TYPES,
   HANDLER_IDS,
   TWITCH_HANDLERS,
+  isHandlerDisabledReason,
   isHandlerId,
   isSenderId,
+  type HandlerDisabledReason,
   type HandlerId,
   type SenderId,
 } from '@pvtch/shared/twitch-registry';
@@ -39,6 +41,9 @@ export interface HandlerState {
   enabled: boolean;
   enabledAt: number | null;
   updatedAt: number | null;
+  /** Why pvtch turned the handler off; null when it is on or the streamer
+   * turned it off. */
+  disabledReason: HandlerDisabledReason | null;
 }
 
 export interface SubscriptionRecord {
@@ -137,19 +142,32 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
       enabled: number;
       enabled_at: number | null;
       updated_at: number;
+      disabled_reason: string | null;
     }>(
       this.sql,
-      `SELECT enabled, enabled_at, updated_at FROM handlers WHERE handler_id = ?`,
+      `SELECT enabled, enabled_at, updated_at, disabled_reason FROM handlers
+       WHERE handler_id = ?`,
       assertHandler(handlerId)
     )[0];
     if (!row) {
-      // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
-      return { enabled: false, enabledAt: null, updatedAt: null };
+      return {
+        enabled: false,
+        // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
+        enabledAt: null,
+        // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
+        updatedAt: null,
+        // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
+        disabledReason: null,
+      };
     }
+    const reason = row.disabled_reason;
     return {
       enabled: row.enabled === 1,
       enabledAt: row.enabled_at,
       updatedAt: row.updated_at,
+      disabledReason:
+        // eslint-disable-next-line unicorn/no-null -- RPC-serializable absent value
+        reason !== null && isHandlerDisabledReason(reason) ? reason : null,
     };
   }
 
@@ -164,8 +182,9 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     return HANDLER_IDS.filter((id) => enabled.has(id));
   }
 
-  /** Enable a handler. On a disabled-to-enabled transition, requests a
-   * subscription sync for its sender and starts the sender's reconcile. */
+  /** Enable a handler, clearing any disabled reason. On a
+   * disabled-to-enabled transition, requests a subscription sync for its
+   * sender and starts the sender's reconcile. */
   enableHandler(handlerId: HandlerId): HandlerState {
     const wasEnabled = this.getHandler(handlerId).enabled;
     const now = Date.now();
@@ -176,6 +195,7 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
        ON CONFLICT(handler_id) DO UPDATE SET
          enabled_at = CASE WHEN handlers.enabled = 1 THEN handlers.enabled_at ELSE excluded.enabled_at END,
          enabled = 1,
+         disabled_reason = NULL,
          updated_at = excluded.updated_at`,
       handlerId,
       now,
@@ -185,16 +205,33 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     return this.getHandler(handlerId);
   }
 
-  /** Disable a handler. On an enabled-to-disabled transition, requests a
+  /** Disable a handler. `reason` is set when pvtch turns it off (see
+   * HandlerDisabledReason) and omitted when the streamer does, which clears
+   * any earlier reason. On an enabled-to-disabled transition, requests a
    * subscription sync for its sender. */
-  disableHandler(handlerId: HandlerId): HandlerState {
-    const wasEnabled = this.getHandler(handlerId).enabled;
+  disableHandler(
+    handlerId: HandlerId,
+    reason?: HandlerDisabledReason
+  ): HandlerState {
+    if (reason !== undefined && !isHandlerDisabledReason(reason)) {
+      throw new Error(`Unknown disabled reason: ${String(reason)}`);
+    }
+    const current = this.getHandler(handlerId);
+    const wasEnabled = current.enabled;
+    // pvtch turning off a handler that is already off (a late 403 or
+    // revocation) must not relabel the streamer's own choice.
+    if (reason !== undefined && !wasEnabled) return current;
     this.sql.exec(
-      `INSERT INTO handlers (handler_id, enabled, enabled_at, updated_at)
-       VALUES (?, 0, NULL, ?)
-       ON CONFLICT(handler_id) DO UPDATE SET enabled = 0, updated_at = excluded.updated_at`,
+      `INSERT INTO handlers (handler_id, enabled, enabled_at, updated_at, disabled_reason)
+       VALUES (?, 0, NULL, ?, ?)
+       ON CONFLICT(handler_id) DO UPDATE SET
+         enabled = 0,
+         updated_at = excluded.updated_at,
+         disabled_reason = excluded.disabled_reason`,
       handlerId,
-      Date.now()
+      Date.now(),
+      // eslint-disable-next-line unicorn/no-null -- SQL NULL
+      reason ?? null
     );
     if (wasEnabled) this.senderChanged(TWITCH_HANDLERS[handlerId].sender);
     return this.getHandler(handlerId);
