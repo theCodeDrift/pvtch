@@ -31,7 +31,7 @@ core SHALL serve `/account` to signed-in users only; a signed-out request SHALL 
 
 1. refuse a present `Origin` that isn't `PVTCH_APP_URL`'s origin;
 2. return 400 with the submitted form data when the typed login doesn't match the user's login, compared case-insensitively;
-3. call `deleteAccount(userId)` on the user's `User` DO;
+3. clear the legacy `PvtchBackend` Lingo config for the user's current token, then call `deleteAccount(userId)` on the user's `User` DO, returning 500 without signing out if either fails;
 4. delete the request's `session-` record and clear `pvtch_token` and `pvtch_name`;
 5. redirect to `/account/deleted`.
 
@@ -54,19 +54,18 @@ No record of the deletion SHALL be logged.
 
 ### Requirement: Account deletion job
 
-`deleteAccount(userId)` on the `User` DO SHALL record a deletion marker inside the account's serialized queue and schedule a `delete-account` job on the DO's `JobScheduler` with idempotency key `delete-account`. A repeat call while the marker exists SHALL do nothing. While the marker exists, `ensure`, `setScopes`, `clearScopes`, `rotateToken` and `endSessions` SHALL refuse, and the sign-in callback SHALL redirect to `/account/deleted`.
+`deleteAccount(userId)` on the `User` DO SHALL record a deletion marker inside the account's serialized queue and schedule a `delete-account` job on the DO's `JobScheduler` with idempotency key `delete-account`. A repeat call while the marker exists SHALL do nothing. While the marker exists, `ensure`, `setScopes`, `rotateToken` and `endSessions` SHALL refuse, `clearScopes` SHALL return without writing, and the sign-in callback SHALL redirect to `/account/deleted`.
 
-The job SHALL run these steps in order, each idempotent, and retry with the scheduler's backoff on error:
+The job SHALL run these steps in order, each idempotent, and reschedule itself in 300 seconds after a failed step, without a retry cap:
 
 1. call `purge()` on the user's `TwitchChannel`, rescheduling itself in 60 seconds while it returns `{ done: false }`;
-2. delete the legacy `PvtchBackend` Lingo config for the account's token, if any;
-3. delete `token-data-` for the current and every pending-revocation token, then `twitch-data-{id}`;
-4. delete the DO's alarm and all of its storage.
+2. delete `token-data-` for the current and every pending-revocation token, then `twitch-data-{id}`;
+3. delete the DO's alarm and all of its storage.
 
 #### Scenario: Complete deletion
 
 - **WHEN** the job finishes
-- **THEN** no `twitch-data-`, `token-data-` or legacy Lingo record remains for the user, the `TwitchChannel` and `User` DOs hold no data, and every session for the user is signed out
+- **THEN** no `twitch-data-` or `token-data-` record remains for the user, the `TwitchChannel` and `User` DOs hold no data, and every session for the user is signed out
 
 #### Scenario: Partial failure
 

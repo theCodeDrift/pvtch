@@ -104,4 +104,13 @@ export const twitchChannelMigrations: Migrations = {
     sql.exec(`ALTER TABLE message_claims ADD COLUMN owner TEXT`);
     sql.exec(`ALTER TABLE message_claims ADD COLUMN done_at INTEGER`);
   },
+  5: (sql) => {
+    // Present while the broadcaster's pvtch account is being deleted.
+    // `purge()` deletes all storage, this row included, once done.
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS purge (
+        started_at INTEGER NOT NULL
+      )
+    `);
+  },
 };

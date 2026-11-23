@@ -9,12 +9,12 @@ Two follow-ups were left open and are approved in `proposal.md`: ending all of a
 
 Per-user data lives in four places:
 
-| Store | Key | What |
-|---|---|---|
-| KV `PVTCH_ACCOUNTS` | `twitch-data-{id}`, `token-data-{token}`, `session-{s}` | account read model, overlay key index, sessions |
-| `User` DO (core) | `twitch:{id}` | account row, progress, Lingo, profile, boards, scheduler |
-| `PvtchBackend` DO (core) | `normalizeKey(token, 'lingo-config')` | legacy Lingo config not yet migrated |
-| `TwitchChannel` DO (pvtch-storage) | `twitch:{id}` | handler state, EventSub subscription records, Lingual settings, flags, scheduler; message cache in memory |
+| Store                              | Key                                                     | What                                                                                                      |
+| ---------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| KV `PVTCH_ACCOUNTS`                | `twitch-data-{id}`, `token-data-{token}`, `session-{s}` | account read model, overlay key index, sessions                                                           |
+| `User` DO (core)                   | `twitch:{id}`                                           | account row, progress, Lingo, profile, boards, scheduler                                                  |
+| `PvtchBackend` DO (core)           | `normalizeKey(token, 'lingo-config')`                   | legacy Lingo config not yet migrated                                                                      |
+| `TwitchChannel` DO (pvtch-storage) | `twitch:{id}`                                           | handler state, EventSub subscription records, Lingual settings, flags, scheduler; message cache in memory |
 
 pvtch stores no user access token. The only Twitch token is the app token in `PVTCH_KV`.
 
@@ -89,20 +89,22 @@ Equal timestamps are allowed (`issuedAt >= notBefore` survives), which is why th
 
 **While `account_deletion` has a row:**
 
-- `Account.ensure` throws `AccountDeletionInProgress`. The callback turns that into a redirect to `/account/deleted`.
-- `setScopes`, `clearScopes`, `rotateToken` and `endSessions` also refuse.
+- `Account.ensure` throws `AccountDeletionInProgress`. The callback turns that into a redirect to `/account/deleted`. Errors cross DO RPC as plain `Error`s, so the callback matches the message (`isAccountDeletionInProgress`), not the class.
+- `setScopes`, `rotateToken` and `endSessions` also throw.
+- `clearScopes` returns without writing instead of throwing. A late Twitch `authorization.revoke` then acks instead of retrying its queue message.
 
 **The `delete-account` task** re-runs from the top on each attempt, and every step is idempotent:
 
 1. **TwitchChannel:** call `channel.purge()` (below).
    - If it returns `{ done: false }`, reschedule `delete-account` in 60 seconds and stop this attempt.
-2. **Legacy Lingo:** delete the `PvtchBackend` legacy Lingo entry for the account's token, using the same key `lingo-legacy.ts` reads. A missing entry is fine.
-3. **KV:** delete `token-data-{token}`, every pending-revocation token's `token-data-`, and `twitch-data-{id}`. `session-` records are left to expire: `resolveSession` already fails without `twitch-data-`.
-4. **The DO itself:** `ctx.storage.deleteAlarm()`, then `ctx.storage.deleteAll()`. This removes the `account_deletion` row, the scheduler's tables and every plugin's tables at once.
+2. **KV:** delete `token-data-{token}`, every pending-revocation token's `token-data-`, and `twitch-data-{id}`. `session-` records are left to expire: `resolveSession` already fails without `twitch-data-`.
+3. **The DO itself:** `ctx.storage.deleteAlarm()`, then `ctx.storage.deleteAll()`. This removes the `account_deletion` row, the scheduler's tables and every plugin's tables at once. The plugins are then constructed again, so this instance runs on empty tables instead of missing ones.
 
-The token for steps 2 and 3 comes from the DO's `account` row, which survives until step 4. If the DO never had an account row (a KV-only account), `deleteAccount` imports it first, as `require` does today.
+The tokens for step 2 come from the DO's `account` row, which survives until step 3. If the DO never had an account row (a KV-only account), `deleteAccount` imports it first, as `require` does today.
 
-A thrown error in any step propagates to the scheduler, which retries with its existing backoff. Errors log without user data.
+A failed step is caught in the handler, which logs the error message without user data and reschedules `delete-account` in 300 seconds. The scheduler's own retries are capped, and a deletion must not stop at a cap.
+
+**Legacy Lingo isn't a job step.** pvtch-twitch type-checks `User` against its own `Env`, which has no `PVTCH_BACKEND`, so the DO can't reach it. `POST /account/delete` clears the `PvtchBackend` entry for the current token (new `PvtchBackend.clear()`) before calling `deleteAccount`, and fails without starting the deletion if that clear fails. Entries under tokens from earlier rotations were imported at rotation and are never read again, so they expire on their own within 25 hours.
 
 **Why the scheduler:** `revoke-tokens` and `sync-profile` already run on it, with idempotency keys and alarm-driven retries. Deletion needs exactly that and nothing new.
 
@@ -131,7 +133,7 @@ It's added to the `Expect<AssertRPCSerializable<TwitchChannel>>` coverage and re
 **`POST /account/delete`:**
 
 1. **Checks:** `authMiddleware`, the Origin check, and the typed login compared case-insensitively with `user.login`. A mismatch returns 400 with the form data, per the UI conventions.
-2. **Deletes:** calls `deleteAccount(user.id)`.
+2. **Deletes:** clears the legacy Lingo entry, then calls `deleteAccount(user.id)`.
 3. **Signs out:** deletes this request's `session-` record and clears `pvtch_token` and `pvtch_name`.
 4. **Redirects** to `/account/deleted`.
 

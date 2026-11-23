@@ -1,6 +1,6 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject } from 'cloudflare:workers';
 
-type TTLStrategy = "PRESERVE_ON_UPDATE" | "PRESERVE_ON_FETCH";
+type TTLStrategy = 'PRESERVE_ON_UPDATE' | 'PRESERVE_ON_FETCH';
 export type TTLOptions = {
   strategy: TTLStrategy;
   ttlMs: number;
@@ -48,37 +48,43 @@ export class PvtchBackend extends DurableObject<Env> {
     }
 
     const ttl = options?.ttlMs ?? TTL;
-    const strategy = options?.strategy ?? "PRESERVE_ON_UPDATE";
+    const strategy = options?.strategy ?? 'PRESERVE_ON_UPDATE';
 
-    await this.ctx.storage.put("strategy", strategy);
-    await this.ctx.storage.put("ttl", ttl);
+    await this.ctx.storage.put('strategy', strategy);
+    await this.ctx.storage.put('ttl', ttl);
 
     const exp = Date.now() + ttl;
-    await this.ctx.storage.put("data", value);
-    await this.ctx.storage.put("exp", exp);
+    await this.ctx.storage.put('data', value);
+    await this.ctx.storage.put('exp', exp);
     await this.ctx.storage.deleteAlarm(); // best effort
     await this.ctx.storage.setAlarm(exp);
   }
 
   async get(): Promise<string> {
     const strategy =
-      (await this.ctx.storage.get<TTLStrategy>("strategy")) ??
-      "PRESERVE_ON_UPDATE";
+      (await this.ctx.storage.get<TTLStrategy>('strategy')) ??
+      'PRESERVE_ON_UPDATE';
 
-    if (strategy === "PRESERVE_ON_FETCH") {
-      const ttl = (await this.ctx.storage.get<number>("ttl")) ?? TTL;
+    if (strategy === 'PRESERVE_ON_FETCH') {
+      const ttl = (await this.ctx.storage.get<number>('ttl')) ?? TTL;
       const exp = Date.now() + ttl;
-      await this.ctx.storage.put("exp", exp);
+      await this.ctx.storage.put('exp', exp);
       await this.ctx.storage.deleteAlarm(); // best effort
       await this.ctx.storage.setAlarm(exp);
     }
 
-    const value = (await this.ctx.storage.get<string>("data")) ?? "";
+    const value = (await this.ctx.storage.get<string>('data')) ?? '';
     return value;
   }
 
+  /** Delete the stored value and its expiry. Safe on an empty instance. */
+  async clear(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
+
   async alarm() {
-    const expires = await this.ctx.storage.get<number>("exp");
+    const expires = await this.ctx.storage.get<number>('exp');
     if (expires && expires < Date.now()) {
       await this.ctx.storage.deleteAll();
     }

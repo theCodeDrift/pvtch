@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogOut, X } from 'lucide-react';
+import { Link } from 'react-router';
+import { LogOut, UserRound, X } from 'lucide-react';
 import { TwitchIcon } from '@/components/ui/icons/twitch';
 import { Button } from '@/components/ui/button';
 import {
@@ -70,6 +71,12 @@ export const TwitchLogin = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link to="/account">
+              <UserRound />
+              Account
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleLogout}>
             <LogOut />
             Sign out

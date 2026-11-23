@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null -- KV returns null for a missing key */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveSession } from '../src/session';
+import { newSessionRecord, resolveSession } from '../src/session';
 
 const ACCOUNT = {
   id: 'u-1',
@@ -13,6 +13,17 @@ const ACCOUNT = {
 
 function accounts(entries: Record<string, string>) {
   return { get: (key: string) => Promise.resolve(entries[key] ?? null) };
+}
+
+/** A signed-in KV whose account has `cutoff` as its sessionsNotBefore. */
+function withCutoff(session: object, cutoff?: number) {
+  return accounts({
+    'session-s-1': JSON.stringify(session),
+    'twitch-data-u-1': JSON.stringify({
+      ...ACCOUNT,
+      ...(cutoff === undefined ? {} : { sessionsNotBefore: cutoff }),
+    }),
+  });
 }
 
 const SIGNED_IN = {
@@ -60,5 +71,47 @@ describe('resolveSession', () => {
       'twitch-data-u-1': JSON.stringify(ACCOUNT),
     });
     expect(await resolveSession(kv, 'overlay-1')).toBe(undefined);
+  });
+
+  describe('sessionsNotBefore', () => {
+    const base = { userId: 'u-1', token: 'overlay-1' };
+
+    it('signs out a session issued before the cutoff', async () => {
+      const kv = withCutoff({ ...base, issuedAt: 1000 }, 2000);
+      expect(await resolveSession(kv, 's-1')).toBe(undefined);
+    });
+
+    it('signs out a session without issuedAt once a cutoff exists', async () => {
+      expect(await resolveSession(withCutoff(base, 1), 's-1')).toBe(undefined);
+    });
+
+    it('keeps a session issued at the cutoff', async () => {
+      const kv = withCutoff({ ...base, issuedAt: 2000 }, 2000);
+      expect(await resolveSession(kv, 's-1')).toMatchObject({ id: 'u-1' });
+    });
+
+    it('keeps every session when there is no cutoff', async () => {
+      for (const session of [base, { ...base, issuedAt: 5 }]) {
+        expect(await resolveSession(withCutoff(session), 's-1')).toMatchObject({
+          id: 'u-1',
+        });
+      }
+    });
+  });
+});
+
+describe('newSessionRecord', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stamps the record with the current time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1234);
+    expect(newSessionRecord('u-1', 'overlay-1')).toEqual({
+      userId: 'u-1',
+      token: 'overlay-1',
+      issuedAt: 1234,
+    });
   });
 });

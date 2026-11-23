@@ -1,7 +1,10 @@
 import { redirect } from 'react-router';
 import type { Route } from './+types/callback';
 import { cloudflareEnvironmentContext } from '@/context';
-import type { TwitchUserData } from '@/lib/account-record';
+import {
+  type TwitchUserData,
+  isAccountDeletionInProgress,
+} from '@/lib/account-record';
 import { createToken } from '@/lib/create-token';
 import {
   LOGIN_STATE_COOKIE,
@@ -14,7 +17,7 @@ import { readSecret } from '@pvtch/shared/secrets';
 import {
   SESSION_PREFIX,
   SESSION_TTL_SECONDS,
-  type SessionRecord,
+  newSessionRecord,
 } from '@pvtch/shared/session';
 
 type TwitchTokenResponse = {
@@ -65,7 +68,7 @@ async function startSession(
   while (sessionToken === account.token) {
     sessionToken = createToken();
   }
-  const record: SessionRecord = { userId: account.id, token: account.token };
+  const record = newSessionRecord(account.id, account.token);
   await env.PVTCH_ACCOUNTS.put(
     `${SESSION_PREFIX}${sessionToken}`,
     JSON.stringify(record),
@@ -155,13 +158,24 @@ async function completeLogin(request: Request, env: Env): Promise<Response> {
 
   // The user's DO is the single writer for the account: concurrent first
   // logins all get the one overlay token it mints.
-  const account = await env.PVTCH_USER.get(
-    env.PVTCH_USER.idFromName(`twitch:${user.id}`)
-  ).ensureAccount({
-    id: user.id,
-    login: user.login,
-    display_name: user.display_name,
-  });
+  let account: TwitchUserData;
+  try {
+    account = await env.PVTCH_USER.get(
+      env.PVTCH_USER.idFromName(`twitch:${user.id}`)
+    ).ensureAccount({
+      id: user.id,
+      login: user.login,
+      display_name: user.display_name,
+    });
+  } catch (error) {
+    // Signing in while the account is still being deleted: no new account
+    // until the deletion finishes.
+    if (isAccountDeletionInProgress(error)) {
+      const appUrl = env.PVTCH_APP_URL || 'http://localhost:5173';
+      return redirect(`${appUrl}/account/deleted`);
+    }
+    throw error;
+  }
 
   const sessionToken = await startSession(request, env, account);
 
