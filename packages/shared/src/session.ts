@@ -14,10 +14,15 @@ export const TWITCH_DATA_PREFIX = 'twitch-data-';
 /** 30 days. Fixed, not sliding: users sign in again when it runs out. */
 export const SESSION_TTL_SECONDS = 2_592_000;
 
-/** `token` is the user's overlay token when the session was issued. */
+/**
+ * `token` is the user's overlay token when the session was issued.
+ * `issuedAt` (epoch ms) is compared with the account's `sessionsNotBefore`;
+ * sessions written before it existed count as issued at 0.
+ */
 export const sessionRecord = z.object({
   userId: z.string(),
   token: z.string(),
+  issuedAt: z.number().optional(),
 });
 
 export type SessionRecord = z.infer<typeof sessionRecord>;
@@ -29,9 +34,16 @@ export const accountRecord = z.looseObject({
   display_name: z.string(),
   token: z.string(),
   scopes: z.array(z.string()).optional(),
+  /** Sessions issued before this (epoch ms) are signed out. */
+  sessionsNotBefore: z.number().optional(),
 });
 
 export type AccountRecord = z.infer<typeof accountRecord>;
+
+/** A session record for `token`, issued now. Every session writer uses this. */
+export function newSessionRecord(userId: string, token: string): SessionRecord {
+  return { userId, token, issuedAt: Date.now() };
+}
 
 /** A KV namespace, typed structurally because this package has no Workers types. */
 interface AccountsReader {
@@ -52,7 +64,8 @@ function parse<T>(schema: z.ZodType<T>, raw: string | null): T | undefined {
  * The account behind a session token, or undefined. A session only counts
  * while the account's overlay token still matches the one it was issued
  * against, so an account deleted and created again doesn't revive old
- * sessions.
+ * sessions. A session issued before the account's `sessionsNotBefore`
+ * (sign out everywhere) is signed out.
  */
 export async function resolveSession(
   accounts: AccountsReader,
@@ -68,5 +81,12 @@ export async function resolveSession(
     accountRecord,
     await accounts.get(`${TWITCH_DATA_PREFIX}${session.userId}`)
   );
-  return account?.token === session.token ? account : undefined;
+  if (account?.token !== session.token) return undefined;
+  if (
+    account.sessionsNotBefore !== undefined &&
+    (session.issuedAt ?? 0) < account.sessionsNotBefore
+  ) {
+    return undefined;
+  }
+  return account;
 }

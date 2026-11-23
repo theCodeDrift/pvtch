@@ -29,13 +29,14 @@ function routeChat(channel: TwitchChannel, messageId: string | null) {
 describe('TwitchChannel', () => {
   let sql: SqlStorage;
   let setAlarm: ReturnType<typeof vi.fn>;
+  let deleteAlarm: ReturnType<typeof vi.fn>;
   let send: ReturnType<typeof vi.fn>;
   let channel: TwitchChannel;
 
   function construct(): TwitchChannel {
     const ctx = {
       id: { name: 'twitch:123' },
-      storage: { sql, setAlarm },
+      storage: { sql, setAlarm, deleteAlarm, deleteAll },
     } as unknown as DurableObjectState;
     const env = {
       TWITCH_EVENTS: { send },
@@ -54,6 +55,15 @@ describe('TwitchChannel', () => {
       .toArray();
   }
 
+  /** Like DurableObjectStorage.deleteAll on SQLite: every table is gone. */
+  function deleteAll(): Promise<void> {
+    for (const name of tableNames()) {
+      if (name.startsWith('sqlite_')) continue;
+      sql.exec(`DROP TABLE "${name}"`);
+    }
+    return Promise.resolve();
+  }
+
   function tableNames() {
     return sql
       .exec<{ name: string }>(
@@ -68,6 +78,7 @@ describe('TwitchChannel', () => {
     vi.setSystemTime(new Date('2026-10-23T12:00:00Z'));
     sql = createWorkerdSql();
     setAlarm = vi.fn();
+    deleteAlarm = vi.fn(() => Promise.resolve());
     send = vi.fn(() => Promise.resolve());
     channel = construct();
   });
@@ -788,6 +799,73 @@ describe('TwitchChannel', () => {
         'lingual.reply-threading',
       ]);
       expect(channel.flags().set('lingual.reply-threading', false)).toEqual([]);
+    });
+  });
+
+  describe('purge', () => {
+    it('disables handlers and waits while subscriptions remain', async () => {
+      channel.enableHandler('lingual');
+      await channel.alarm();
+      channel.recordSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+      send.mockClear();
+
+      expect(await channel.purge()).toEqual({ done: false });
+      expect(channel.listHandlers()).toEqual([]);
+      await channel.alarm();
+      expect(send).toHaveBeenCalledOnce();
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'sync', senderId: 'pvtchbot' })
+      );
+      expect(deleteAlarm).not.toHaveBeenCalled();
+    });
+
+    it('waits for the cleanup sync to be sent', async () => {
+      channel.enableHandler('lingual');
+      await channel.alarm();
+
+      expect(await channel.purge()).toEqual({ done: false });
+      await channel.alarm();
+      expect(await channel.purge()).toEqual({ done: true });
+    });
+
+    it('deletes everything once Twitch has nothing left', async () => {
+      channel.enableHandler('lingual');
+      await channel.alarm();
+      channel.recordSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+      channel.lingual().setSettings({ language: 'spanish' });
+      channel.flags().set('lingual.reply-threading', true);
+
+      await channel.purge();
+      await channel.alarm();
+      channel.clearSubscriptionIfMatches('pvtchbot', CHAT, 'abc');
+
+      expect(await channel.purge()).toEqual({ done: true });
+      expect(deleteAlarm).toHaveBeenCalled();
+      expect(channel.getHandler('lingual').enabled).toBe(false);
+      expect(channel.lingual().getSettings().language).toBeNull();
+      expect(channel.flags().list()).toEqual([]);
+      expect(pendingJobs('reconcile-subscriptions:pvtchbot')).toEqual([]);
+    });
+
+    it('refuses to enable a handler while purging', async () => {
+      channel.recordSubscription('pvtchbot', CHAT, 'abc', 'enabled');
+      await channel.purge();
+
+      expect(() => channel.enableHandler('lingual')).toThrow(
+        'channel is being deleted'
+      );
+      expect(channel.getHandler('lingual').enabled).toBe(false);
+    });
+
+    it('is done at once for a channel that never enabled anything', async () => {
+      expect(await channel.purge()).toEqual({ done: true });
+      expect(await channel.purge()).toEqual({ done: true });
+    });
+
+    it('allows enabling again after the purge finished', async () => {
+      await channel.purge();
+      channel.enableHandler('lingual');
+      expect(channel.getHandler('lingual').enabled).toBe(true);
     });
   });
 });

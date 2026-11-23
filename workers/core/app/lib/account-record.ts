@@ -14,6 +14,9 @@ export type TwitchUserData = {
   // Twitch scopes granted through /auth/grant (login itself grants none).
   // Cleared when the user revokes pvtch on Twitch.
   scopes?: string[];
+  // Sessions issued before this (epoch ms) are signed out: "sign out
+  // everywhere". Owned by the User DO's Account plugin.
+  sessionsNotBefore?: number;
 };
 
 export const twitchDataKeyPrefix = 'twitch-data-';
@@ -22,3 +25,24 @@ export const twitchDataKeyPrefix = 'twitch-data-';
 export type TokenData = string; // Twitch user ID
 
 export const tokenDataKeyPrefix = 'token-data-';
+
+/**
+ * Thrown by account writes while the account is being deleted. Errors cross
+ * the Durable Object RPC boundary as plain `Error`s, so callers match the
+ * message with `isAccountDeletionInProgress`, not the class.
+ */
+export const ACCOUNT_DELETION_IN_PROGRESS = 'account deletion in progress';
+
+export class AccountDeletionInProgress extends Error {
+  constructor() {
+    super(ACCOUNT_DELETION_IN_PROGRESS);
+    this.name = 'AccountDeletionInProgress';
+  }
+}
+
+export function isAccountDeletionInProgress(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(ACCOUNT_DELETION_IN_PROGRESS)
+  );
+}

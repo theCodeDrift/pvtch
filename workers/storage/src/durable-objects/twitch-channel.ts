@@ -101,19 +101,30 @@ const RECONCILE_TASK_PREFIX = 'reconcile-subscriptions:';
  */
 export class TwitchChannel extends DurableObject<StorageEnv> {
   private sql: SqlStorage;
-  private scheduler: JobScheduler;
-  private _lingual: Lingual;
-  private _flags: Flags;
-  private _messageCache: MessageCache;
+  private scheduler!: JobScheduler;
+  private _lingual!: Lingual;
+  private _flags!: Flags;
+  private _messageCache!: MessageCache;
 
   constructor(ctx: DurableObjectState, env: StorageEnv) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    this.initStorage();
+  }
+
+  /**
+   * Run every migration and construct the plugins. Called again after
+   * `purge()` wipes storage, so this instance keeps working on empty
+   * tables instead of missing ones.
+   */
+  private initStorage(): void {
     migrate(this.sql, twitchChannelMigrations, '_twitch_channel_version');
-    this.scheduler = new JobScheduler(this.sql, ctx, (job) => this.runJob(job));
+    this.scheduler = new JobScheduler(this.sql, this.ctx, (job) =>
+      this.runJob(job)
+    );
     this._lingual = new Lingual(this.sql);
     this._flags = new Flags(this.sql);
-    this._messageCache = new MessageCache(env.MESSAGE_CACHE_TTL_MS);
+    this._messageCache = new MessageCache(this.env.MESSAGE_CACHE_TTL_MS);
   }
 
   async alarm(): Promise<void> {
@@ -167,6 +178,9 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
   /** Enable a handler. On a disabled-to-enabled transition, requests a
    * subscription sync for its sender and starts the sender's reconcile. */
   enableHandler(handlerId: HandlerId): HandlerState {
+    if (this.isPurging()) {
+      throw new Error('channel is being deleted');
+    }
     const wasEnabled = this.getHandler(handlerId).enabled;
     const now = Date.now();
     // Keep the original enabled_at when already enabled.
@@ -198,6 +212,45 @@ export class TwitchChannel extends DurableObject<StorageEnv> {
     );
     if (wasEnabled) this.senderChanged(TWITCH_HANDLERS[handlerId].sender);
     return this.getHandler(handlerId);
+  }
+
+  /**
+   * Delete everything stored for this broadcaster, for pvtch account
+   * deletion. Each call disables every handler (which schedules the
+   * EventSub cleanup sync as usual) and reports `done: false` while that
+   * cleanup is still running or any subscription record remains. Once
+   * nothing is left on Twitch's side, it deletes all storage and reports
+   * `done: true`. Idempotent; the caller polls until done. While a purge is
+   * in progress, `enableHandler` refuses.
+   */
+  async purge(): Promise<{ done: boolean }> {
+    if (!this.isPurging()) {
+      this.sql.exec(`INSERT INTO purge (started_at) VALUES (?)`, Date.now());
+    }
+    for (const handlerId of this.listHandlers()) {
+      this.disableHandler(handlerId);
+    }
+
+    const senders = Object.values(TWITCH_HANDLERS).map(
+      (handler) => handler.sender
+    );
+    const pending = senders.some(
+      (senderId) =>
+        this.listSubscriptions(senderId).length > 0 ||
+        this.scheduler.hasActive(`${SYNC_TASK_PREFIX}${senderId}`)
+    );
+    if (pending) return { done: false };
+
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.initStorage();
+    return { done: true };
+  }
+
+  private isPurging(): boolean {
+    return (
+      queryRows(this.sql, `SELECT started_at FROM purge LIMIT 1`).length > 0
+    );
   }
 
   getSubscription(senderId: SenderId, type: string): SubscriptionRecord | null {

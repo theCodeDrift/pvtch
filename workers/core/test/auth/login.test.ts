@@ -159,7 +159,11 @@ describe('GET /auth/callback', () => {
     expect(accounts.keys('session-')).toEqual([`session-${sessionToken}`]);
     expect(
       JSON.parse(accounts.store.get(`session-${sessionToken}`) ?? '')
-    ).toEqual({ userId: USER.id, token: USER.token });
+    ).toEqual({
+      userId: USER.id,
+      token: USER.token,
+      issuedAt: expect.any(Number) as unknown,
+    });
     expect(accounts.putOptions.get(`session-${sessionToken}`)).toEqual({
       expirationTtl: 2_592_000,
     });
@@ -187,7 +191,11 @@ describe('GET /auth/callback', () => {
     expect(sessionToken).not.toBe(account.token);
     expect(
       JSON.parse(accounts.store.get(`session-${sessionToken}`) ?? '')
-    ).toEqual({ userId: 'u-1', token: account.token });
+    ).toEqual({
+      userId: 'u-1',
+      token: account.token,
+      issuedAt: expect.any(Number) as unknown,
+    });
   });
 
   it('gives concurrent first logins one token and keeps both sessions', async () => {

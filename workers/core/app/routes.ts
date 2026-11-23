@@ -20,6 +20,9 @@ export default [
     route('howto/deploy-your-own', './routes/howto/deploy-your-own.tsx'),
     route('howto/board', './routes/howto/board.tsx'),
     route('board', './routes/board._index.tsx'),
+    route('account', './routes/account.tsx'),
+    route('account/delete', './routes/account.delete.tsx'),
+    route('account/deleted', './routes/account.deleted.tsx'),
   ]),
 
   // Private instance page (no layout)
@@ -64,6 +67,7 @@ export default [
   route('auth/grant', './routes/auth/grant.tsx'),
   route('auth/grant/callback', './routes/auth/grant.callback.tsx'),
   route('account/token/rotate', './routes/account.token.rotate.tsx'),
+  route('account/sessions/end', './routes/account.sessions.end.tsx'),
 
   // API routes (loader/action only)
   route('lingo/config/:token/set', './routes/lingo.config.$token.set.tsx'),

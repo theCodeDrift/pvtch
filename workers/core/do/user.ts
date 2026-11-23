@@ -14,17 +14,22 @@ import {
   twitchDataKeyPrefix,
 } from '../app/lib/account-record';
 
+/** How long the deletion job waits for the channel's EventSub cleanup. */
+const PURGE_RECHECK_SECONDS = 60;
+/** How long the deletion job waits after a failed step. */
+const DELETE_RETRY_SECONDS = 300;
+
 /**
  * User - SQLite-backed Durable Object for per-user storage.
  * Keyed by "twitch:{userId}". Thin shell over plugins.
  */
 export class User extends DurableObject<Env> implements JobSchedulerHost {
-  private _progress: Progress;
-  private _lingo: Lingo;
-  private _profile: Profile;
-  private _board: Board;
-  private _account: Account;
-  private scheduler: JobScheduler;
+  private _progress!: Progress;
+  private _lingo!: Lingo;
+  private _profile!: Profile;
+  private _board!: Board;
+  private _account!: Account;
+  private scheduler!: JobScheduler;
   // Per-instance latch: ensureProfileSync() is called from the lingo translate
   // path on every chat message. The scheduler's idempotency check still costs
   // a row read each time, so gate it behind a memory flag — we only need to
@@ -33,13 +38,23 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const sql = ctx.storage.sql;
+    this.initPlugins();
+  }
+
+  /**
+   * Construct every plugin, which runs its migrations. Called again after
+   * account deletion wipes storage, so this instance keeps working on
+   * empty tables instead of missing ones.
+   */
+  private initPlugins(): void {
+    const sql = this.ctx.storage.sql;
     this._progress = new Progress(sql);
     this._lingo = new Lingo(sql);
     this._profile = new Profile(sql);
     this._board = new Board(sql);
-    this._account = new Account(sql, env.PVTCH_ACCOUNTS);
-    this.scheduler = new JobScheduler(sql, ctx);
+    this._account = new Account(sql, this.env.PVTCH_ACCOUNTS);
+    this.scheduler = new JobScheduler(sql, this.ctx);
+    this.profileSyncEnsured = false;
   }
 
   progress(): Progress {
@@ -81,6 +96,27 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
     const result = await this._account.rotateToken(userId);
     this.scheduleRevocationRetry();
     return result;
+  }
+
+  /** Sign out everywhere. The caller re-issues its own session after. */
+  endAccountSessions(userId: string): Promise<TwitchUserData> {
+    return this._account.endSessions(userId);
+  }
+
+  /**
+   * Delete the account and everything stored for it. Legacy Lingo config
+   * in PvtchBackend is cleared by the caller first: pvtch-twitch also
+   * type-checks this class, and its Env has no PVTCH_BACKEND. Marks the account as
+   * being deleted, which stops every account write, and schedules the
+   * `delete-account` job. A repeat call while deletion runs does nothing.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    await this._account.beginDeletion(userId);
+    this.scheduler.schedule(0, 'delete-account', {}, { key: 'delete-account' });
+  }
+
+  isDeletingAccount(): boolean {
+    return this._account.isDeleting();
   }
 
   hasPendingAccountRevocations(): boolean {
@@ -132,6 +168,10 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
         );
         break;
       }
+      case 'delete-account': {
+        await this.runAccountDeletion();
+        break;
+      }
       case 'revoke-tokens': {
         if (await this._account.retryRevocations()) {
           this.scheduleRevocationRetry(300);
@@ -142,5 +182,49 @@ export class User extends DurableObject<Env> implements JobSchedulerHost {
         console.warn(`Unknown scheduled task: ${job.task}`);
       }
     }
+  }
+
+  /**
+   * One attempt at deleting the account. Every step is idempotent, so each
+   * attempt starts from the top. Waiting on the channel's EventSub cleanup
+   * or a failed step reschedules the job; it never gives up, because the
+   * account is unusable until it finishes.
+   */
+  private async runAccountDeletion(): Promise<void> {
+    const targets = this._account.deletionTargets();
+    if (!targets) return;
+    try {
+      const channel = this.env.TWITCH_CHANNEL.get(
+        this.env.TWITCH_CHANNEL.idFromName(`twitch:${targets.userId}`)
+      );
+      const { done } = await channel.purge();
+      if (!done) {
+        this.scheduleDeletion(PURGE_RECHECK_SECONDS);
+        return;
+      }
+
+      await this._account.deleteReadModel();
+    } catch (error) {
+      // No user data in the log: only that a step failed and why.
+      console.error(
+        'account deletion step failed:',
+        error instanceof Error ? error.message : String(error)
+      );
+      this.scheduleDeletion(DELETE_RETRY_SECONDS);
+      return;
+    }
+
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.initPlugins();
+  }
+
+  private scheduleDeletion(delaySeconds: number): void {
+    this.scheduler.schedule(
+      delaySeconds,
+      'delete-account',
+      {},
+      { key: 'delete-account' }
+    );
   }
 }

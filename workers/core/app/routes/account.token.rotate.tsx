@@ -8,7 +8,7 @@ import { authMiddleware } from '@/middleware/auth';
 import {
   SESSION_PREFIX,
   SESSION_TTL_SECONDS,
-  type SessionRecord,
+  newSessionRecord,
 } from '@pvtch/shared/session';
 
 export const middleware: Route.MiddlewareFunction[] = [authMiddleware];
@@ -59,7 +59,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const sessionToken = readCookie(request, SESSION_COOKIE);
   if (sessionToken) {
-    const record: SessionRecord = { userId: user.id, token: account.token };
+    const record = newSessionRecord(user.id, account.token);
     await env.PVTCH_ACCOUNTS.put(
       `${SESSION_PREFIX}${sessionToken}`,
       JSON.stringify(record),

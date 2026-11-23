@@ -1,6 +1,7 @@
 import { migrate, type Migrations } from '../helpers/migrate';
 import { createToken } from '../../app/lib/create-token';
 import {
+  AccountDeletionInProgress,
   tokenDataKeyPrefix,
   twitchDataKeyPrefix,
   type TwitchUserData,
@@ -12,7 +13,8 @@ import {
  * user's Durable Object, so first login, scope grants and token rotation are
  * serialized per Twitch user. KV stays the read model for every worker.
  *
- * The DO owns the identity fields (id, login, display_name, token). Other
+ * The DO owns the identity fields (id, login, display_name, token) and the
+ * sessions cutoff (`sessionsNotBefore`). Other
  * fields on the KV record (`scopes`) are carried over from the current KV
  * record when publishing, unless the write sets or clears them. pvtch-twitch
  * clears scopes on revoke through `clearScopes`, never by writing KV.
@@ -46,6 +48,18 @@ const accountMigrations: Migrations = {
       )
     `);
   },
+  3: (sql) => {
+    // "Sign out everywhere": sessions issued before this are signed out.
+    sql.exec(`ALTER TABLE account ADD COLUMN sessions_not_before INTEGER`);
+    // Present while the account is being deleted. Every account write
+    // refuses until the deletion job removes the DO's storage, row included.
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS account_deletion (
+        user_id TEXT PRIMARY KEY,
+        started_at INTEGER NOT NULL
+      )
+    `);
+  },
 };
 
 export type AccountIdentity = Pick<
@@ -55,8 +69,11 @@ export type AccountIdentity = Pick<
 
 type OwnedFields = Pick<
   TwitchUserData,
-  'id' | 'login' | 'display_name' | 'token'
+  'id' | 'login' | 'display_name' | 'token' | 'sessionsNotBefore'
 >;
+
+/** What the deletion job needs to remove the account's KV records. */
+export type DeletionTargets = { userId: string; tokens: string[] };
 
 export class Account {
   private sql: SqlStorage;
@@ -77,9 +94,11 @@ export class Account {
    */
   ensure(identity: AccountIdentity): Promise<TwitchUserData> {
     return this.exclusive(async () => {
+      this.refuseWhileDeleting();
       const current = await this.readKV(identity.id);
       const before = this.read() ?? imported(current);
       const owned: OwnedFields = {
+        ...before,
         id: identity.id,
         login: identity.login,
         display_name: identity.display_name,
@@ -103,6 +122,7 @@ export class Account {
   /** Record the granted scopes without touching anything else. */
   setScopes(userId: string, scopes: string[]): Promise<TwitchUserData> {
     return this.exclusive(async () => {
+      this.refuseWhileDeleting();
       const current = await this.readKV(userId);
       const owned = this.require(userId, current);
       const account = await this.publish(owned, current, { scopes });
@@ -114,10 +134,12 @@ export class Account {
   /**
    * Forget every granted scope (the user revoked pvtch on Twitch), keeping
    * the token and every other field. No-op for an unknown user, or when no
-   * scopes are recorded and the read model is current.
+   * scopes are recorded and the read model is current. Also a no-op while
+   * the account is being deleted, so a late Twitch revoke doesn't retry.
    */
   clearScopes(userId: string): Promise<TwitchUserData | undefined> {
     return this.exclusive(async () => {
+      if (this.isDeleting()) return;
       const current = await this.readKV(userId);
       if (!current && !this.read()) return;
       const owned = this.require(userId, current);
@@ -146,6 +168,7 @@ export class Account {
     userId: string
   ): Promise<{ account: TwitchUserData; previous: string }> {
     return this.exclusive(async () => {
+      this.refuseWhileDeleting();
       const current = await this.readKV(userId);
       const before = this.require(userId, current);
       let token = createToken();
@@ -162,6 +185,89 @@ export class Account {
       await this.revokePending();
       return { account, previous: before.token };
     });
+  }
+
+  /**
+   * Sign out everywhere: sessions issued before now stop resolving. The
+   * cutoff is published to `twitch-data-` with the rest of the account, so
+   * `resolveSession` checks it without calling this DO. The caller
+   * re-issues its own session afterwards to stay signed in.
+   */
+  endSessions(userId: string): Promise<TwitchUserData> {
+    return this.exclusive(async () => {
+      this.refuseWhileDeleting();
+      const current = await this.readKV(userId);
+      const owned = {
+        ...this.require(userId, current),
+        sessionsNotBefore: Date.now(),
+      };
+      this.write(owned);
+      const account = await this.publish(owned, current);
+      await this.revokePending();
+      return account;
+    });
+  }
+
+  /**
+   * Mark the account as being deleted. Imports a KV-only account first, so
+   * the deletion job knows its token. True when this call started the
+   * deletion, false when one was already in progress.
+   */
+  beginDeletion(userId: string): Promise<boolean> {
+    return this.exclusive(async () => {
+      if (this.isDeleting()) return false;
+      if (!this.read()) {
+        const owned = imported(await this.readKV(userId));
+        if (owned?.id === userId) this.write(owned);
+      }
+      this.sql.exec(
+        `INSERT INTO account_deletion (user_id, started_at) VALUES (?, ?)`,
+        userId,
+        Date.now()
+      );
+      return true;
+    });
+  }
+
+  isDeleting(): boolean {
+    return (
+      this.sql.exec(`SELECT user_id FROM account_deletion LIMIT 1`).toArray()
+        .length > 0
+    );
+  }
+
+  /** The account's id and every overlay token that may still be in KV. */
+  deletionTargets(): DeletionTargets | undefined {
+    const row = this.sql
+      .exec(`SELECT user_id FROM account_deletion LIMIT 1`)
+      .toArray() as unknown as { user_id: string }[];
+    const userId = row[0]?.user_id;
+    if (!userId) return undefined;
+    const tokens = [...this.pendingRevocations()];
+    const current = this.read()?.token;
+    if (current) tokens.unshift(current);
+    return { userId, tokens };
+  }
+
+  /**
+   * Delete the account's read model: `token-data-` for every token it has
+   * held that may remain, then `twitch-data-`. Once `twitch-data-` is gone,
+   * every session for the account stops resolving. Throws on a failed
+   * delete, so the deletion job retries.
+   */
+  deleteReadModel(): Promise<void> {
+    return this.exclusive(async () => {
+      const targets = this.deletionTargets();
+      if (!targets) return;
+      for (const token of targets.tokens) {
+        await this.accounts.delete(`${tokenDataKeyPrefix}${token}`);
+      }
+      await this.accounts.delete(`${twitchDataKeyPrefix}${targets.userId}`);
+    });
+  }
+
+  private refuseWhileDeleting(): void {
+    if (this.isDeleting()) throw new AccountDeletionInProgress();
   }
 
   /** Retry pending revocations. True if any are still pending. */
@@ -259,19 +365,30 @@ export class Account {
 
   private read(): OwnedFields | undefined {
     const rows = this.sql
-      .exec(`SELECT id, login, display_name, token FROM account LIMIT 1`)
-      .toArray() as unknown as OwnedFields[];
-    return rows[0];
+      .exec(
+        `SELECT id, login, display_name, token, sessions_not_before FROM account LIMIT 1`
+      )
+      .toArray() as unknown as (Omit<OwnedFields, 'sessionsNotBefore'> & {
+      sessions_not_before: number | null;
+    })[];
+    const row = rows[0];
+    if (!row) return undefined;
+    const { sessions_not_before, ...owned } = row;
+    return sessions_not_before === null
+      ? owned
+      : { ...owned, sessionsNotBefore: sessions_not_before };
   }
 
   private write(owned: OwnedFields): void {
     this.sql.exec(
-      `INSERT OR REPLACE INTO account (id, login, display_name, token, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO account (id, login, display_name, token, sessions_not_before, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       owned.id,
       owned.login,
       owned.display_name,
       owned.token,
+      // eslint-disable-next-line unicorn/no-null -- SQL NULL for no cutoff
+      owned.sessionsNotBefore ?? null,
       Date.now()
     );
   }
@@ -280,12 +397,16 @@ export class Account {
 /** The owned fields of a KV-only account, for the lazy import. */
 function imported(record: TwitchUserData | undefined): OwnedFields | undefined {
   if (!record) return undefined;
-  return {
+  const owned: OwnedFields = {
     id: record.id,
     login: record.login,
     display_name: record.display_name,
     token: record.token,
   };
+  if (record.sessionsNotBefore !== undefined) {
+    owned.sessionsNotBefore = record.sessionsNotBefore;
+  }
+  return owned;
 }
 
 function sameOwned(record: TwitchUserData, owned: OwnedFields): boolean {
@@ -293,6 +414,7 @@ function sameOwned(record: TwitchUserData, owned: OwnedFields): boolean {
     record.id === owned.id &&
     record.login === owned.login &&
     record.display_name === owned.display_name &&
-    record.token === owned.token
+    record.token === owned.token &&
+    record.sessionsNotBefore === owned.sessionsNotBefore
   );
 }

@@ -1,7 +1,6 @@
 import { Link, useLoaderData, data } from 'react-router';
 import type { Route } from './+types/welcome';
 import { userContext } from '@/context';
-import { RotateOverlayKey } from '@/components/rotate-overlay-key';
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -17,12 +16,11 @@ export function loader({ context }: Route.LoaderArgs) {
   const user = context.get(userContext);
   return data({
     displayName: user?.displayName ?? '',
-    signedIn: Boolean(user),
   });
 }
 
 export default function Welcome() {
-  const { displayName, signedIn } = useLoaderData<typeof loader>();
+  const { displayName } = useLoaderData<typeof loader>();
 
   return (
     <div className="space-y-8">
@@ -81,17 +79,6 @@ export default function Welcome() {
           </Link>
         </div>
       </div>
-
-      {signedIn && (
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Overlay key</h2>
-          <p className="text-sm text-muted-foreground">
-            Your overlay and API URLs share one secret key. If one of them
-            leaked, rotate the key to replace it everywhere.
-          </p>
-          <RotateOverlayKey />
-        </div>
-      )}
     </div>
   );
 }
