@@ -36,6 +36,7 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { LanguageCombobox } from '@/components/language-combobox';
+import { LlmBadge } from '@/components/llm-badge';
 import {
   Card,
   CardContent,
@@ -417,6 +418,7 @@ export default function BotsLingual() {
         <h1 className="mb-2 flex items-center gap-2 text-3xl font-bold text-zinc-900 dark:text-zinc-50">
           <Bot className="size-7" /> Lingual
         </h1>
+        <LlmBadge className="mb-3" />
         <p className="text-zinc-600 dark:text-zinc-400">
           A chat bot that translates messages in your Twitch chat. It replies in
           a thread under each message that isn&apos;t in your language, so you

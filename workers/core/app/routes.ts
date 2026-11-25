@@ -19,6 +19,7 @@ export default [
     route('bots/lingual', './routes/bots.lingual.tsx'),
     route('howto/deploy-your-own', './routes/howto/deploy-your-own.tsx'),
     route('howto/board', './routes/howto/board.tsx'),
+    route('llm', './routes/llm.tsx'),
     route('board', './routes/board._index.tsx'),
     route('account', './routes/account.tsx'),
     route('account/delete', './routes/account.delete.tsx'),

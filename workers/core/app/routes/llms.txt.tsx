@@ -21,6 +21,12 @@ Retired early; its translate API returns 410 Gone. A translation bot that Lingo 
 
 - URL: /helpers/lingo
 
+## LLM Use
+
+PVTCH discloses where and how it uses large language models: which models and providers, how they are evaluated, and what happens to chat data. Features that use an LLM are labeled "LLM powered".
+
+- URL: /llm
+
 ## Technical Details
 
 - **Platform**: Cloudflare Workers with React Router

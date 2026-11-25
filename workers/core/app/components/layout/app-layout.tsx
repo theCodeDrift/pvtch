@@ -61,6 +61,7 @@ const navigation = [
   {
     title: 'Support PVTCH',
     items: [
+      { title: 'How We Use LLMs', href: '/llm' },
       {
         title: 'Host Your Own',
         href: '/howto/deploy-your-own',
