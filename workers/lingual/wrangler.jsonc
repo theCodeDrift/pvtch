@@ -38,6 +38,7 @@
    *   DISABLE_THINKING          "true" sends reasoning off. The models must
    *                             support it, or requests find no endpoint.
    * An invalid value keeps v2 quiet. Check a new pair at /evals in the harness.
+   * The public /llm page on www names these models; update it with them.
    */
   "vars": {
     "LINGUAL_V2_DETECTOR_API": "decisions",

@@ -3,6 +3,8 @@ import { chatSend } from '@openrouter/sdk/funcs/chatSend.js';
 import { unwrapAsync } from '@openrouter/sdk/types/fp.js';
 import { z } from 'zod';
 
+import { PRIVATE_ROUTING } from './openrouter';
+
 export interface TranslatorConfig {
   model: string;
   disableThinking: boolean;
@@ -138,7 +140,7 @@ async function translate(
           },
         },
         // Only route to providers that honor the JSON schema.
-        provider: { requireParameters: true },
+        provider: { ...PRIVATE_ROUTING, requireParameters: true },
         // Reply in chat time; a translation doesn't need thinking.
         ...(disableThinking ? { reasoning: { effort: 'none' as const } } : {}),
       },

@@ -3,6 +3,7 @@
 // (~1.6 MB and ~160 ms), enough to fail Cloudflare's startup CPU limit.
 // Never import a value from `@openrouter/sdk` itself; `import type` is fine.
 import { OpenRouterCore } from '@openrouter/sdk/core.js';
+import type { ProviderPreferences } from '@openrouter/sdk/models/providerpreferences.js';
 import { OpenRouterError } from '@openrouter/sdk/models/errors/openroutererror.js';
 import { readSecret } from '@pvtch/shared/secrets';
 
@@ -13,6 +14,17 @@ export function openRouterClient(env: Env): OpenRouterCore {
     appTitle: 'pvtch Lingual',
   });
 }
+
+/**
+ * Chat messages are other people's words, so every call routes only to
+ * endpoints on OpenRouter's zero data retention list that don't train on
+ * prompts. A model with no such endpoint fails rather than falling back. The
+ * public LLM page (/llm on www) promises this; change both together.
+ */
+export const PRIVATE_ROUTING = {
+  zdr: true,
+  dataCollection: 'deny',
+} as const satisfies ProviderPreferences;
 
 /** How much of an error response body to log. */
 const MAX_LOGGED_BODY = 1000;
