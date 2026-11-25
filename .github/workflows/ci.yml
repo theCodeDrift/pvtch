@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   test:
-    name: lint + typecheck + tests
+    # The "main :: Required Checks" ruleset requires a check named ci.
+    name: ci
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
