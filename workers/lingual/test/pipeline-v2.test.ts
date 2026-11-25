@@ -59,6 +59,25 @@ function fencedMessage(call = 0): { tag: string; message: string } {
   return { tag: match[1], message: match[2] };
 }
 
+/** Every OpenRouter call so far, `calls` of them, asked for zero data
+ * retention endpoints only. The /llm page on www promises this. */
+function expectPrivateRouting(calls: number): void {
+  const decisions = decide.mock.calls.map(
+    ([request]) =>
+      (request as { decisionsRequest: { provider?: unknown } }).decisionsRequest
+        .provider
+  );
+  const chats = send.mock.calls.map(
+    ([request]) =>
+      (request as { chatRequest: { provider?: unknown } }).chatRequest.provider
+  );
+  const providers = [...decisions, ...chats];
+  expect(providers).toHaveLength(calls);
+  for (const provider of providers) {
+    expect(provider).toMatchObject({ zdr: true, dataCollection: 'deny' });
+  }
+}
+
 describe('formatReply', () => {
   it('returns nothing when only usernames remain', () => {
     expect(formatReply('@bob @alice')).toBeUndefined();
@@ -93,6 +112,12 @@ describe('translateChatMessageV2', () => {
       kind: 'reply',
       reply: 'hi friends, how is everyone tonight?',
     });
+  });
+
+  it('routes detection and translation only to zero data retention endpoints', async () => {
+    await translateEvent();
+
+    expectPrivateRouting(2);
   });
 
   it('translates at the confidence threshold', async () => {
@@ -288,6 +313,7 @@ describe('translateChatMessageV2', () => {
         })
       ).resolves.toMatchObject({ outcome: 'translated', probability: 0.03 });
       expect(decide).not.toHaveBeenCalled();
+      expectPrivateRouting(2);
     });
 
     it('treats an out-of-range chat answer as a failed detection', async () => {
@@ -365,6 +391,7 @@ describe('translateRequestV2', () => {
     );
     expect(chatRequest.messages[1]?.role).toBe('user');
     expect(fencedMessage().message).toBe('hola amigos');
+    expectPrivateRouting(1);
   });
 
   it('fences the message in the user turn with a new random tag', async () => {
