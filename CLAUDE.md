@@ -21,6 +21,20 @@ When creating commit messages:
 - **NEVER** add `Co-Authored-By: Claude` or any AI co-author attribution
 - Developers are 100% accountable for all code they commit, regardless of how it was created
 
+## Requesting the Claude review
+
+Nothing triggers the Claude review automatically; this repo is public, so it runs only on demand. Post a standalone comment whose whole body is `@claude /review`:
+
+```bash
+gh pr comment <n> -R theCodeDrift/pvtch --body '@claude /review'
+```
+
+- **When opening a PR**, every time.
+- **On a later push that adds significant new code.**
+- **Never for** review fixes, renames, typo or doc tweaks, or a rebase with no new work, and never twice for the same code.
+
+The review reports a `Claude Review` commit status on the PR head (pending, then success or failure). It is advisory, not a required check. `@claude /review all` re-reviews the whole diff from scratch, and `@claude /focus` asks Claude where a human reviewer should look.
+
 ## Worktrees
 
 When working in a git worktree:
