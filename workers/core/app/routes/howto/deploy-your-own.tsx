@@ -443,6 +443,10 @@ wrangler queues create twitch-events-dlq`}
             <code className="bg-muted px-1 rounded">
               workers/twitch/wrangler.jsonc
             </code>{' '}
+            and{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/lingual/wrangler.jsonc
+            </code>{' '}
             if you run the chat bot):
           </p>
           <CodeBlock copyable>
@@ -603,6 +607,37 @@ pnpm --filter @pvtch/lingual deploy`}
   --name TWITCH_EVENTSUB_SECRET --scopes workers --remote
 # any random 10-100 characters`}
           </CodeBlock>
+          <p>
+            Lingual translates through{' '}
+            <a
+              href="https://openrouter.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand hover:underline"
+            >
+              OpenRouter
+            </a>
+            . Create an OpenRouter account, add credits, and make an API key.
+            Store the key in the same Secrets Store, and set your store&apos;s
+            id in{' '}
+            <code className="bg-muted px-1 rounded">
+              workers/lingual/wrangler.jsonc
+            </code>
+            :
+          </p>
+          <CodeBlock copyable>
+            {`wrangler secrets-store secret create YOUR_STORE_ID \\
+  --name PVTCH_OPENROUTER_API_KEY --scopes workers --remote`}
+          </CodeBlock>
+          <p className="text-sm">
+            The models are the{' '}
+            <code className="bg-muted px-1 rounded">LINGUAL_V2_*</code> vars in
+            that file. Every call is routed only to zero data retention
+            endpoints that don&apos;t train on prompts, so a model you switch to
+            needs one of those on OpenRouter. If you change the models, update
+            the <code className="bg-muted px-1 rounded">/llm</code> page too,
+            which tells your viewers which models read their chat.
+          </p>
           <p>Create Lingual&apos;s own queues:</p>
           <CodeBlock copyable>
             {`wrangler queues create lingual-events
@@ -708,7 +743,11 @@ ALLOWED_USERS=your_username,friend_username,another_user`}
                 PVTCH_OPENROUTER_API_KEY
               </code>{' '}
               is in your account&apos;s Secrets Store before deploying
-              pvtch-lingual.
+              pvtch-lingual, and that your OpenRouter account has credits. If
+              pvtch-lingual&apos;s logs show OpenRouter found no endpoint for a
+              model, that model in the{' '}
+              <code className="bg-muted px-1 rounded">LINGUAL_V2_*</code> vars
+              has no zero data retention endpoint; pick another one.
             </p>
           </div>
         </div>
