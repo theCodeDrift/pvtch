@@ -1,18 +1,18 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import type { Route } from './+types/flagparty';
 import { useNoTheme } from '@/hooks/use-no-theme';
 import {
   layoutFlags,
+  parseFont,
   parseStyle,
   parseTheme,
   splitMessage,
+  type FlagFont,
+  type FlagLayout,
   type FlagStyle,
   type PlacedFlag,
 } from '@/lib/flagparty';
-
-const FONT_FAMILY =
-  "'Baloo 2', 'Arial Rounded MT Bold', 'Segoe UI Black', 'Helvetica Neue', Arial, sans-serif";
 
 const ANIMATIONS = `
 @keyframes fp-drop {
@@ -31,84 +31,91 @@ export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Flag Party - PVTCH' }];
 }
 
-/** One flag drawn with its attachment point at (0, 0), hanging down. */
-function FlagShape({
-  flag,
-  style,
-  width,
-  height,
-}: {
+type ShapeProps = {
   flag: PlacedFlag;
   style: FlagStyle;
   width: number;
-  height: number;
-}) {
+  layout: FlagLayout;
+  font: FlagFont;
+};
+
+/**
+ * One flag drawn with its cord tied to the string at (0, 0), hanging
+ * straight down.
+ */
+function FlagShape({ flag, style, width, layout, font }: ShapeProps) {
   const half = width / 2;
-  const fontSize = width * 0.56;
+  const cord = layout.cordLength;
+  const height = layout.flagHeight;
   const letter = (cy: number) => (
     <text
       x={0}
       y={cy}
       textAnchor="middle"
       dominantBaseline="central"
-      fill={flag.text}
-      fontSize={fontSize}
-      fontWeight={800}
-      fontFamily={FONT_FAMILY}
+      fill={layout.text}
+      fontSize={width * 0.56}
+      fontWeight={font.weight}
+      fontFamily={font.family}
     >
       {flag.char}
     </text>
   );
 
+  let body: ReactNode;
   if (style === 'circle') {
-    const radius = half;
-    const cy = height - radius;
-    return (
+    const cy = cord + half;
+    body = (
       <>
-        <line
-          x1={0}
-          y1={0}
-          x2={0}
-          y2={cy - radius + 2}
-          stroke={flag.accent}
-          strokeWidth={Math.max(2, width * 0.04)}
-          strokeLinecap="round"
-        />
-        <circle
-          cx={0}
-          cy={0}
-          r={Math.max(3, width * 0.06)}
-          fill={flag.accent}
-        />
-        <circle cx={0} cy={cy} r={radius} fill={flag.fill} />
+        <circle cx={0} cy={cy} r={half} fill={flag.fill} />
         {letter(cy)}
       </>
     );
-  }
-
-  if (style === 'duo') {
-    const band = height * 0.14;
-    const notch = height * 0.76;
-    return (
+  } else if (style === 'duo') {
+    const band = cord + (height - cord) * 0.14;
+    const notch = cord + (height - cord) * 0.76;
+    body = (
       <>
         <polygon
-          points={`${-half},0 ${half},0 ${half},${height} 0,${notch} ${-half},${height}`}
+          points={`${-half},${cord} ${half},${cord} ${half},${height} 0,${notch} ${-half},${height}`}
           fill={flag.fill}
         />
-        <rect x={-half} y={0} width={width} height={band} fill={flag.accent} />
+        <rect
+          x={-half}
+          y={cord}
+          width={width}
+          height={band - cord}
+          fill={flag.accent}
+        />
         {letter(band + (notch - band) * 0.55)}
+      </>
+    );
+  } else {
+    const shoulder = cord + (height - cord) * 0.62;
+    body = (
+      <>
+        <polygon
+          points={`${-half},${cord} ${half},${cord} ${half},${shoulder} 0,${height} ${-half},${shoulder}`}
+          fill={flag.fill}
+        />
+        {letter(cord + (height - cord) * 0.38)}
       </>
     );
   }
 
-  const shoulder = height * 0.62;
   return (
     <>
-      <polygon
-        points={`${-half},0 ${half},0 ${half},${shoulder} 0,${height} ${-half},${shoulder}`}
-        fill={flag.fill}
+      <line
+        x1={0}
+        y1={0}
+        x2={0}
+        y2={cord + 2}
+        stroke={layout.rope}
+        strokeWidth={Math.max(2, width * 0.035)}
+        strokeLinecap="round"
       />
-      {letter(height * 0.38)}
+      <circle cx={0} cy={0} r={Math.max(3, width * 0.045)} fill={layout.rope} />
+      {body}
     </>
   );
 }
@@ -123,6 +130,7 @@ export default function FlagPartySource() {
   const message = params.get('message') ?? '';
   const theme = parseTheme(params.get('theme'));
   const style = parseStyle(params.get('style'));
+  const font = parseFont(params.get('font'), params.get('weight'));
 
   const layout = useMemo(
     () => layoutFlags(splitMessage(message), theme, style),
@@ -134,60 +142,62 @@ export default function FlagPartySource() {
   }
 
   return (
-    <svg
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
-      width="100%"
-      role="img"
-      aria-label={message}
-      style={{ display: 'block', overflow: 'visible' }}
-    >
-      <style>{ANIMATIONS}</style>
-      <defs>
-        <filter id="fp-shadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow
-            dx={0}
-            dy={4}
-            stdDeviation={4}
-            floodColor="#000"
-            floodOpacity={0.35}
+    <>
+      {/* React hoists this into <head>; inside the <svg> it would be inert */}
+      <link rel="stylesheet" href={font.href} precedence="default" />
+      <svg
+        viewBox={`0 0 ${layout.width} ${layout.height}`}
+        width="100%"
+        role="img"
+        aria-label={message}
+        style={{ display: 'block', overflow: 'visible' }}
+      >
+        <style>{ANIMATIONS}</style>
+        <defs>
+          <filter id="fp-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow
+              dx={0}
+              dy={4}
+              stdDeviation={4}
+              floodColor="#000"
+              floodOpacity={0.35}
+            />
+          </filter>
+        </defs>
+        {layout.ropes.map((rope) => (
+          <path
+            key={rope.d}
+            d={rope.d}
+            fill="none"
+            stroke={layout.rope}
+            strokeWidth={5}
+            strokeLinecap="round"
+            filter="url(#fp-shadow)"
           />
-        </filter>
-      </defs>
-      {layout.ropes.map((rope) => (
-        <path
-          key={rope.d}
-          d={rope.d}
-          fill="none"
-          stroke={layout.rope}
-          strokeWidth={5}
-          strokeLinecap="round"
-          filter="url(#fp-shadow)"
-        />
-      ))}
-      {layout.flags.map((flag) => (
-        <g
-          key={flag.key}
-          transform={`translate(${flag.x} ${flag.y}) rotate(${style === 'circle' ? 0 : flag.angle})`}
-        >
-          <g
-            className="fp-drop"
-            style={{ animationDelay: `${flag.order * 70}ms` }}
-          >
+        ))}
+        {layout.flags.map((flag) => (
+          <g key={flag.key} transform={`translate(${flag.x} ${flag.y})`}>
             <g
-              className="fp-sway"
-              style={{ animationDelay: `${flag.order * -0.53}s` }}
-              filter="url(#fp-shadow)"
+              className="fp-drop"
+              style={{ animationDelay: `${flag.order * 70}ms` }}
             >
-              <FlagShape
-                flag={flag}
-                style={style}
-                width={layout.flagWidth}
-                height={layout.flagHeight}
-              />
+              <g
+                className="fp-sway"
+                style={{ animationDelay: `${flag.order * -0.53}s` }}
+                filter="url(#fp-shadow)"
+              >
+                <FlagShape
+                  flag={flag}
+                  style={style}
+                  width={layout.flagWidth}
+                  layout={layout}
+                  font={font}
+                />
+              </g>
             </g>
           </g>
-        </g>
-      ))}
-    </svg>
+        ))}
+      </svg>
+    </>
   );
 }
