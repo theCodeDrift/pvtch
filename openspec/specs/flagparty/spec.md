@@ -31,7 +31,7 @@ The first `/` in the message SHALL break it onto a second line; later slashes SH
 
 ### Requirement: Curved strings that scale
 
-Each line SHALL hang from a string that curves from the left edge to the right edge of the source. A single string SHALL sag deeper than each of two strings. Flags SHALL be SVG, sized to the longest line and shared by both lines, and the overlay SHALL scale to the browser source's width. Mono and duo flags SHALL tilt with the string; circle flags SHALL hang straight down.
+Each line SHALL hang from a string that curves from the left edge to the right edge of the source. A single string SHALL sag deeper than each of two strings. Flags SHALL be SVG, sized to the longest line and shared by both lines, and the overlay SHALL scale to the browser source's width. Every flag SHALL hang straight down from a short cord tied to the string.
 
 #### Scenario: Two lines are shallower
 
@@ -44,4 +44,22 @@ The `style` parameter SHALL choose the flag shape: `mono` (a single-color pennan
 
 ### Requirement: Themes
 
-The `theme` parameter SHALL choose the colors: `birthday` (the default), `anniversary`, `anniversary2` or `pastel`. An unknown theme SHALL fall back to `birthday`. Flag colors SHALL cycle letter by letter through the theme. Letter color SHALL be implicit: light or dark, whichever contrasts more with the flag.
+The `theme` parameter SHALL choose the colors: `birthday-dark` (the default), `birthday-light`, `anniversary-gold`, `anniversary-silver` or `pastel`. `birthday` SHALL mean `birthday-dark` and `anniversary` SHALL mean `anniversary-gold`. An unknown theme SHALL fall back to the default. Flag colors SHALL cycle letter by letter through the theme.
+
+#### Scenario: Fixed color
+
+- **WHEN** the theme is `color-ff00ff`
+- **THEN** every flag is `#ff00ff`, and a duo band is a darker shade of it
+
+#### Scenario: Several fixed colors
+
+- **WHEN** the theme is `color-ff00ff-00aaff`
+- **THEN** the flags alternate between the two colors (3-digit hex is accepted too)
+
+### Requirement: One letter tone per theme
+
+Letters SHALL be black at 40% opacity or white at 40% opacity, the same for every flag in a theme. Each named theme's colors SHALL be chosen to suit its one tone. For a fixed-color theme, the tone SHALL be whichever reads best on its least-contrasting color.
+
+### Requirement: Google font
+
+The `font` parameter SHALL load any Google Fonts family by name (letters, digits and spaces only), with an optional `weight` from 100 to 900 in steps of 100. Without `font`, letters SHALL use Fredoka at weight 600. A custom font without `weight` SHALL use the family's regular cut. An invalid name SHALL fall back to Fredoka.

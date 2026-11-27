@@ -21,53 +21,117 @@ export const BREAK_CHAR = '/';
 export const FLAG_STYLES = ['mono', 'duo', 'circle'] as const;
 export type FlagStyle = (typeof FLAG_STYLES)[number];
 
+/** Letters are a translucent wash of black or white, one tone per theme. */
+export type TextTone = 'dark' | 'light';
+
+export const TEXT_COLORS: Record<TextTone, string> = {
+  dark: 'rgba(0, 0, 0, 0.4)',
+  light: 'rgba(255, 255, 255, 0.4)',
+};
+
 export type FlagTheme = {
   /** Flag colors, cycled letter by letter. */
   fills: string[];
-  /** The string the flags hang from. */
+  /** The duo band color for each fill; defaults to the next fill. */
+  accents?: string[];
+  /** The string and cords the flags hang from. */
   rope: string;
+  /** Every fill in a theme is chosen to read with this one letter tone. */
+  text: TextTone;
 };
 
 export const THEMES = {
-  birthday: {
+  'birthday-light': {
     fills: [
-      '#e63946',
-      '#f4a261',
-      '#ffd23f',
-      '#2a9d8f',
-      '#3a86ff',
-      '#8338ec',
-      '#ff006e',
+      '#ff9aa2',
+      '#ffc285',
+      '#ffe680',
+      '#9be7c4',
+      '#9fd0ff',
+      '#c7b3ff',
+      '#ffb3de',
     ],
     rope: '#f1ece2',
+    text: 'dark',
   },
-  anniversary: {
-    fills: ['#7b1e3a', '#c9a227', '#f5efe0'],
+  'birthday-dark': {
+    fills: [
+      '#d62839',
+      '#e0632a',
+      '#1f9e89',
+      '#2563eb',
+      '#7c3aed',
+      '#db2777',
+      '#15803d',
+    ],
+    rope: '#f1ece2',
+    text: 'light',
+  },
+  'anniversary-gold': {
+    fills: ['#c9a227', '#e2c46a', '#f2e2b1', '#b8902e'],
     rope: '#d8bd5a',
+    text: 'dark',
   },
-  anniversary2: {
-    fills: ['#1d3557', '#a8b2c1', '#e8eef5', '#457b9d'],
+  'anniversary-silver': {
+    fills: ['#b9c0c9', '#d9dee4', '#eef1f4', '#a3abb6'],
     rope: '#c7ced8',
+    text: 'dark',
   },
   pastel: {
     fills: ['#ffc8dd', '#bde0fe', '#caffbf', '#fdffb6', '#cdb4db', '#ffd6a5'],
     rope: '#f4f1ea',
+    text: 'dark',
   },
 } satisfies Record<string, FlagTheme>;
 
 export type ThemeName = keyof typeof THEMES;
-export const THEME_NAMES = Object.keys(THEMES) as ThemeName[];
-export const DEFAULT_THEME: ThemeName = 'birthday';
+export const DEFAULT_THEME: ThemeName = 'birthday-dark';
 export const DEFAULT_STYLE: FlagStyle = 'mono';
 
-const DARK_TEXT = '#1b1b1f';
-const LIGHT_TEXT = '#ffffff';
+/** Short names for the default variant of a theme family. */
+const THEME_ALIASES: Record<string, ThemeName> = {
+  birthday: 'birthday-dark',
+  anniversary: 'anniversary-gold',
+};
 
-export const parseTheme = (input: string | null | undefined): ThemeName => {
+const CUSTOM_ROPE = '#f1ece2';
+const HEX = /^(?:[\da-f]{3}|[\da-f]{6})$/;
+
+const expandHex = (hex: string) =>
+  hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
+
+/**
+ * `color-ff00ff` paints every flag one color; `color-ff00ff-00aaff` cycles
+ * through several. Returns undefined unless every part is a hex code.
+ */
+const parseCustomTheme = (key: string): FlagTheme | undefined => {
+  const match = /^colou?r-(.+)$/.exec(key);
+  if (!match) return;
+  const parts = match[1].split('-');
+  if (parts.length === 0 || parts.length > 12) return;
+  if (!parts.every((part) => HEX.test(part))) return;
+
+  const fills = parts.map((part) => `#${expandHex(part)}`);
+  // pick the tone whose worst flag still reads best
+  const worst = (base: string) =>
+    Math.min(...fills.map((fill) => contrast(fill, base)));
+  const text: TextTone = worst('#ffffff') > worst('#000000') ? 'light' : 'dark';
+  return {
+    fills,
+    // a single color gets a darker band of itself for the duo style
+    accents: fills.length === 1 ? [shade(fills[0], 0.2)] : undefined,
+    rope: CUSTOM_ROPE,
+    text,
+  };
+};
+
+export const parseTheme = (input: string | null | undefined): FlagTheme => {
   const key = (input ?? '').trim().toLowerCase();
-  return (THEME_NAMES as string[]).includes(key)
-    ? (key as ThemeName)
-    : DEFAULT_THEME;
+  const name = THEME_ALIASES[key] ?? key;
+  const named: FlagTheme | undefined = Object.hasOwn(THEMES, name)
+    ? THEMES[name]
+    : undefined;
+  return named ?? parseCustomTheme(key) ?? THEMES[DEFAULT_THEME];
 };
 
 export const parseStyle = (input: string | null | undefined): FlagStyle => {
@@ -75,6 +139,49 @@ export const parseStyle = (input: string | null | undefined): FlagStyle => {
   return (FLAG_STYLES as readonly string[]).includes(key)
     ? (key as FlagStyle)
     : DEFAULT_STYLE;
+};
+
+export const DEFAULT_FONT = 'Fredoka';
+const DEFAULT_FONT_WEIGHT = 600;
+const FONT_NAME = /^[\d A-Za-z]{1,64}$/;
+const FALLBACK_FONTS =
+  "'Arial Rounded MT Bold', 'Segoe UI Black', 'Helvetica Neue', Arial, sans-serif";
+
+export type FlagFont = {
+  /** CSS font-family list, the Google font first. */
+  family: string;
+  weight: number;
+  /** Google Fonts stylesheet to load. */
+  href: string;
+};
+
+/**
+ * Any Google Fonts family by name (`font=Bungee`, `font=Baloo+2`), with an
+ * optional `weight`. A weight the family lacks makes Google refuse the
+ * stylesheet, and the letters fall back to a system font.
+ */
+export const parseFont = (
+  name: string | null | undefined,
+  weight: string | null | undefined
+): FlagFont => {
+  const trimmed = (name ?? '').trim().replaceAll(/\s+/g, ' ');
+  const isCustom = FONT_NAME.test(trimmed);
+  const family = isCustom ? trimmed : DEFAULT_FONT;
+
+  const parsedWeight = Number.parseInt(weight ?? '', 10);
+  const validWeight =
+    parsedWeight >= 100 && parsedWeight <= 900 && parsedWeight % 100 === 0
+      ? parsedWeight
+      : undefined;
+  // a custom family without a weight gets Google's default (400) cut
+  const chosen = validWeight ?? (isCustom ? undefined : DEFAULT_FONT_WEIGHT);
+
+  const query = `${family.replaceAll(' ', '+')}${chosen ? `:wght@${chosen}` : ''}`;
+  return {
+    family: `'${family}', ${FALLBACK_FONTS}`,
+    weight: chosen ?? 400,
+    href: `https://fonts.googleapis.com/css2?family=${query}&display=swap`,
+  };
 };
 
 /** Split a string into user-perceived characters, so emoji get one flag. */
@@ -155,18 +262,26 @@ const contrast = (a: string, b: string): number => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
-/** Pick dark or light letters for a flag color, whichever contrasts more. */
-export const textColorFor = (hex: string): string =>
-  contrast(hex, LIGHT_TEXT) >= contrast(hex, DARK_TEXT)
-    ? LIGHT_TEXT
-    : DARK_TEXT;
-
-/** Flag height as a multiple of its width, per style. */
-const ASPECT: Record<FlagStyle, number> = {
-  mono: 1.3,
-  duo: 1.3,
-  circle: 1.3, // short hanging string plus the disc
+/** Darken a hex color toward black by `amount` (0 to 1). */
+const shade = (hex: string, amount: number): string => {
+  const value = hex.replace('#', '');
+  const channels = [0, 2, 4].map((offset) =>
+    Math.round(
+      Number.parseInt(value.slice(offset, offset + 2), 16) * (1 - amount)
+    )
+  );
+  return `#${channels.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 };
+
+/** Flag body height (below the cord) as a multiple of its width. */
+const BODY: Record<FlagStyle, number> = {
+  mono: 1.2,
+  duo: 1.2,
+  circle: 1,
+};
+
+/** The cord each flag hangs from, as a multiple of its width. */
+export const CORD = 0.22;
 
 /** How far each string sags at its middle, by number of lines. */
 const SAG: Record<number, number> = { 1: 170, 2: 90 };
@@ -186,14 +301,11 @@ const SPACE_SLOT = 0.55;
 export type PlacedFlag = {
   key: string;
   char: string;
-  /** Attachment point on the string. */
+  /** Where the flag's cord ties onto the string. */
   x: number;
   y: number;
-  /** Slope of the string at the attachment point, in degrees. */
-  angle: number;
   fill: string;
   accent: string;
-  text: string;
   /** Position across the whole message, for staggered animation. */
   order: number;
 };
@@ -206,10 +318,13 @@ export type FlagLayout = {
   /** How far each string dips at its middle. */
   sag: number;
   flagWidth: number;
+  /** Cord plus body. */
   flagHeight: number;
+  cordLength: number;
   ropes: Rope[];
   flags: PlacedFlag[];
   rope: string;
+  text: string;
 };
 
 /**
@@ -222,22 +337,15 @@ const ropeY = (top: number, sag: number, x: number) => {
   return top + 4 * sag * t * (1 - t);
 };
 
-const ropeAngle = (sag: number, x: number) => {
-  const t = x / VIEW_WIDTH;
-  const slope = (4 * sag * (1 - 2 * t)) / VIEW_WIDTH;
-  return (Math.atan(slope) * 180) / Math.PI;
-};
-
 /** How many flag slots a line needs; a space takes a narrower slot. */
 const slotsFor = (line: string[]) =>
   line.reduce((total, char) => total + (char === ' ' ? SPACE_SLOT : 1), 0);
 
 export const layoutFlags = (
   lines: string[][],
-  themeName: ThemeName,
+  theme: FlagTheme,
   style: FlagStyle
 ): FlagLayout => {
-  const theme: FlagTheme = THEMES[themeName];
   const sag = SAG[lines.length] ?? SAG[2];
 
   // Both lines share one flag size, set by whichever line needs the most room.
@@ -245,7 +353,8 @@ export const layoutFlags = (
   const span = (SPAN_END - SPAN_START) * VIEW_WIDTH;
   const slot = Math.min(span / maxSlots, MAX_FLAG_WIDTH / FILL);
   const flagWidth = slot * FILL;
-  const flagHeight = flagWidth * ASPECT[style];
+  const cordLength = flagWidth * CORD;
+  const flagHeight = cordLength + flagWidth * BODY[style];
 
   const ropes: Rope[] = [];
   const flags: PlacedFlag[] = [];
@@ -267,16 +376,18 @@ export const layoutFlags = (
       }
       const x = cursor + slot / 2;
       const fill = theme.fills[colorIndex % theme.fills.length];
-      const accent = theme.fills[(colorIndex + 1) % theme.fills.length];
+      const accents = theme.accents ?? [
+        ...theme.fills.slice(1),
+        theme.fills[0],
+      ];
+      const accent = accents[colorIndex % accents.length];
       flags.push({
         key: `${lineIndex}-${charIndex}`,
         char,
         x,
         y: ropeY(top, sag, x),
-        angle: ropeAngle(sag, x),
         fill,
         accent,
-        text: textColorFor(fill),
         order,
       });
       order += 1;
@@ -296,8 +407,10 @@ export const layoutFlags = (
     sag,
     flagWidth,
     flagHeight,
+    cordLength,
     ropes,
     flags,
     rope: theme.rope,
+    text: TEXT_COLORS[theme.text],
   };
 };

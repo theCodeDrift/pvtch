@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CORD,
   DEFAULT_STYLE,
+  DEFAULT_FONT,
   DEFAULT_THEME,
   MAX_CHARS,
   layoutFlags,
+  parseFont,
   parseStyle,
   parseTheme,
   splitMessage,
-  textColorFor,
+  TEXT_COLORS,
+  THEMES,
 } from '../../app/lib/flagparty';
 
 const text = (lines: string[][]) => lines.map((line) => line.join(''));
 const sagOf = (message: string) =>
-  layoutFlags(splitMessage(message), 'birthday', 'mono').sag;
+  layoutFlags(splitMessage(message), THEMES['birthday-dark'], 'mono').sag;
 
 describe('splitMessage', () => {
   it('keeps a short message on one line', () => {
@@ -70,27 +74,102 @@ describe('splitMessage', () => {
   });
 });
 
-describe('parameters', () => {
-  it('falls back to defaults for unknown values', () => {
-    expect(parseTheme('nope')).toBe(DEFAULT_THEME);
-    expect(parseTheme()).toBe(DEFAULT_THEME);
-    expect(parseTheme('Pastel')).toBe('pastel');
+describe('parseTheme', () => {
+  it('resolves named themes and their short aliases', () => {
+    expect(parseTheme('Pastel')).toBe(THEMES.pastel);
+    expect(parseTheme('birthday')).toBe(THEMES['birthday-dark']);
+    expect(parseTheme('anniversary')).toBe(THEMES['anniversary-gold']);
+    expect(parseTheme('anniversary-silver')).toBe(THEMES['anniversary-silver']);
+  });
+
+  it('falls back to the default theme for unknown values', () => {
+    expect(parseTheme('nope')).toBe(THEMES[DEFAULT_THEME]);
+    expect(parseTheme()).toBe(THEMES[DEFAULT_THEME]);
+    expect(parseTheme('color-zzzzzz')).toBe(THEMES[DEFAULT_THEME]);
+    expect(parseTheme('color-')).toBe(THEMES[DEFAULT_THEME]);
+  });
+
+  it('paints every flag a fixed hex color', () => {
+    const theme = parseTheme('color-FF00FF');
+    expect(theme.fills).toEqual(['#ff00ff']);
+    expect(theme.accents).toEqual(['#cc00cc']);
+  });
+
+  it('cycles several fixed colors and expands short hex', () => {
+    const theme = parseTheme('color-f0f-00aaff');
+    expect(theme.fills).toEqual(['#ff00ff', '#00aaff']);
+    expect(theme.accents).toBeUndefined();
+  });
+
+  it('picks one letter tone that reads on every fixed color', () => {
+    expect(parseTheme('color-1d3557').text).toBe('light');
+    expect(parseTheme('color-ffe680').text).toBe('dark');
+  });
+});
+
+describe('parseStyle', () => {
+  it('falls back to mono', () => {
     expect(parseStyle('square')).toBe(DEFAULT_STYLE);
     expect(parseStyle('CIRCLE')).toBe('circle');
   });
+});
 
-  it('picks readable letters for the flag color', () => {
-    expect(textColorFor('#1d3557')).toBe('#ffffff');
-    expect(textColorFor('#ffd23f')).toBe('#1b1b1f');
-    expect(textColorFor('#ffc8dd')).toBe('#1b1b1f');
+describe('parseFont', () => {
+  it('defaults to Fredoka semibold', () => {
+    const font = parseFont();
+    expect(font.family.startsWith(`'${DEFAULT_FONT}'`)).toBe(true);
+    expect(font.weight).toBe(600);
+    expect(font.href).toBe(
+      'https://fonts.googleapis.com/css2?family=Fredoka:wght@600&display=swap'
+    );
+  });
+
+  it('loads any Google font by name', () => {
+    const font = parseFont('Baloo  2');
+    expect(font.family.startsWith("'Baloo 2'")).toBe(true);
+    expect(font.weight).toBe(400);
+    expect(font.href).toBe(
+      'https://fonts.googleapis.com/css2?family=Baloo+2&display=swap'
+    );
+  });
+
+  it('adds a valid weight and ignores a bad one', () => {
+    expect(parseFont('Bungee', '700').href).toContain(
+      'family=Bungee:wght@700&'
+    );
+    expect(parseFont('Bungee', '750').weight).toBe(400);
+  });
+
+  it('refuses names that could break out of the stylesheet URL', () => {
+    expect(parseFont('Roboto&family=Evil').family).toContain(DEFAULT_FONT);
+    expect(parseFont("x'; color: red").family).toContain(DEFAULT_FONT);
   });
 });
 
 describe('layoutFlags', () => {
   it('places one flag per non-space character', () => {
-    const layout = layoutFlags(splitMessage('Hi Mo'), 'birthday', 'mono');
+    const layout = layoutFlags(
+      splitMessage('Hi Mo'),
+      THEMES['birthday-dark'],
+      'mono'
+    );
     expect(layout.flags.map((f) => f.char)).toEqual(['H', 'i', 'M', 'o']);
     expect(layout.ropes).toHaveLength(1);
+  });
+
+  it('uses one letter color for the whole theme', () => {
+    expect(layoutFlags([['a']], THEMES.pastel, 'mono').text).toBe(
+      TEXT_COLORS.dark
+    );
+    expect(layoutFlags([['a']], THEMES['birthday-dark'], 'mono').text).toBe(
+      TEXT_COLORS.light
+    );
+  });
+
+  it('hangs each flag from a cord below the string', () => {
+    const layout = layoutFlags([['a']], THEMES.pastel, 'duo');
+    expect(layout.cordLength).toBeCloseTo(layout.flagWidth * CORD);
+    expect(layout.flagHeight).toBeGreaterThan(layout.cordLength);
   });
 
   it('sags a single string deeper than two', () => {
@@ -100,7 +179,7 @@ describe('layoutFlags', () => {
   it('uses one flag size for both lines and keeps them inside the view', () => {
     const layout = layoutFlags(
       splitMessage('Happy Birthday Morgan and Marie'),
-      'pastel',
+      THEMES.pastel,
       'duo'
     );
     expect(layout.ropes).toHaveLength(2);
@@ -112,13 +191,17 @@ describe('layoutFlags', () => {
   });
 
   it('caps flag size for very short messages', () => {
-    const layout = layoutFlags(splitMessage('A'), 'birthday', 'circle');
+    const layout = layoutFlags(
+      splitMessage('A'),
+      THEMES['birthday-dark'],
+      'circle'
+    );
     expect(layout.flagWidth).toBeLessThanOrEqual(130);
     expect(layout.flags[0].x).toBeCloseTo(layout.width / 2);
   });
 
   it('renders nothing for an empty message', () => {
-    const layout = layoutFlags([], 'birthday', 'mono');
+    const layout = layoutFlags([], THEMES['birthday-dark'], 'mono');
     expect(layout.flags).toEqual([]);
     expect(layout.height).toBe(0);
   });
