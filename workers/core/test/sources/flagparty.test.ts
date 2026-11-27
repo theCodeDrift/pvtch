@@ -58,9 +58,9 @@ describe('splitMessage', () => {
   });
 
   it('caps the message across both lines', () => {
-    const lines = splitMessage(`${'a'.repeat(30)}/${'b'.repeat(30)}`);
+    const lines = splitMessage(`${'a'.repeat(20)}/${'b'.repeat(20)}`);
     expect(lines.flat()).toHaveLength(MAX_CHARS);
-    expect(lines[1]).toHaveLength(MAX_CHARS - 30);
+    expect(lines[1]).toHaveLength(MAX_CHARS - 20);
   });
 
   it('caps a very long query string', () => {
