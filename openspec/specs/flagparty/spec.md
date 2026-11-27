@@ -58,7 +58,7 @@ The `theme` parameter SHALL choose the colors: `birthday-dark` (the default), `b
 
 ### Requirement: One letter tone per theme
 
-Letters SHALL be black at 60% opacity or white at 60% opacity, the same for every flag in a theme. Each named theme's colors SHALL be chosen to suit its one tone. For a fixed-color theme, the tone SHALL be whichever reads best on its least-contrasting color.
+Letters SHALL be black at 85% opacity or white at 85% opacity, the same for every flag in a theme. Each named theme's colors SHALL be chosen to suit its one tone. For a fixed-color theme, the tone SHALL be whichever reads best on its least-contrasting color.
 
 ### Requirement: Google font
 
