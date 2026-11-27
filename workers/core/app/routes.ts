@@ -36,6 +36,7 @@ export default [
   ),
   route('sources/todo/:channel', './routes/sources/todo.$channel.tsx'),
   route('sources/1s/:channel', './routes/sources/1s.$channel.tsx'),
+  route('flagparty', './routes/sources/flagparty.tsx'),
 
   // Board widget (anonymous-by-URL, no layout)
   route('board/new', './routes/board.new.tsx'),
