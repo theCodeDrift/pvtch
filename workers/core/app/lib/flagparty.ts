@@ -94,7 +94,9 @@ const collapse = (input: string) => input.replaceAll(/\s+/g, ' ').trim();
  *   space that keeps the longer line shortest.
  * - The message is capped at MAX_CHARS characters across both lines.
  */
-export const splitMessage = (input = ''): string[][] => {
+export const splitMessage = (raw = ''): string[][] => {
+  // Bound the work to the cap, whatever length the query string arrives at.
+  const input = raw.slice(0, MAX_CHARS * 8);
   const breakAt = input.indexOf(BREAK_CHAR);
 
   const lines =
@@ -136,20 +138,28 @@ const autoBreak = (message: string): string[] => {
   return [chars.slice(0, best).join(''), chars.slice(best + 1).join('')];
 };
 
-/** Pick dark or light letters for a flag color by WCAG relative luminance. */
-export const textColorFor = (hex: string): string => {
+const relativeLuminance = (hex: string): number => {
   const value = hex.replace('#', '');
   const channels = [0, 2, 4].map((offset) => {
     const c = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
     return c <= 0.039_28 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
-  const luminance =
-    0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-  // contrast against white vs. against near-black; take the stronger one
-  const vsWhite = 1.05 / (luminance + 0.05);
-  const vsDark = (luminance + 0.05) / 0.0608;
-  return vsWhite >= vsDark ? LIGHT_TEXT : DARK_TEXT;
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 };
+
+/** WCAG contrast ratio between two colors. */
+const contrast = (a: string, b: string): number => {
+  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort(
+    (x, y) => y - x
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+/** Pick dark or light letters for a flag color, whichever contrasts more. */
+export const textColorFor = (hex: string): string =>
+  contrast(hex, LIGHT_TEXT) >= contrast(hex, DARK_TEXT)
+    ? LIGHT_TEXT
+    : DARK_TEXT;
 
 /** Flag height as a multiple of its width, per style. */
 const ASPECT: Record<FlagStyle, number> = {
