@@ -27,7 +27,7 @@ import { CheckIcon } from '@/components/icons/check';
 
 /*
 Basic UI that isn't so ugly
-  font sizes etc are all relative to window size
+  font sizes scale with the browser-source box (cqh), clamped 12–24px
 Scroll and duplicate magic
 Animations and look nice
 Colors
@@ -448,48 +448,56 @@ export default function TodoSource() {
 
   return (
     <div
-      className="w-full h-screen overflow-hidden rounded-md"
+      className="w-full h-screen overflow-hidden rounded-md [container-type:size]"
       style={{
         backgroundColor: params.bg,
         color: params.fg,
-        fontSize: `max(16px, min(4.2vh, 24px))`,
       }}
     >
-      {params.help && (
-        <div
-          ref={headerRef}
-          className="p-4 italic border-b border-white/30 relative z-10"
-          style={{
-            backgroundColor: params.bg,
-          }}
-        >
-          <div>
-            <strong>!{params.add}</strong>&nbsp;&middot;&nbsp;
-            <strong>!{params.done}</strong>&nbsp;&middot;&nbsp;
-            <strong>!{params.focus}</strong>
+      <div
+        className="w-full h-full"
+        style={{
+          fontSize: 'clamp(12px, 4.2cqh, 24px)',
+        }}
+      >
+        {params.help && (
+          <div
+            ref={headerRef}
+            className="p-4 italic border-b border-white/30 relative z-10"
+            style={{
+              backgroundColor: params.bg,
+            }}
+          >
+            <div>
+              <strong>!{params.add}</strong>&nbsp;&middot;&nbsp;
+              <strong>!{params.done}</strong>&nbsp;&middot;&nbsp;
+              <strong>!{params.focus}</strong>
+            </div>
           </div>
-        </div>
-      )}
-      <div className="w-full h-full">
-        <div
-          ref={ref}
-          className={enableScroll ? 'animate-infinite-scroll' : ''}
-          style={{
-            animationDuration: enableScroll ? `${scrollDuration}s` : undefined,
-          }}
-        >
-          <TaskList
-            usernames={usernames}
-            tasksByUserName={tasksByUserName}
-            max={params.count}
-          />
-          {enableScroll && (
+        )}
+        <div className="w-full h-full">
+          <div
+            ref={ref}
+            className={enableScroll ? 'animate-infinite-scroll' : ''}
+            style={{
+              animationDuration: enableScroll
+                ? `${scrollDuration}s`
+                : undefined,
+            }}
+          >
             <TaskList
               usernames={usernames}
               tasksByUserName={tasksByUserName}
               max={params.count}
             />
-          )}
+            {enableScroll && (
+              <TaskList
+                usernames={usernames}
+                tasksByUserName={tasksByUserName}
+                max={params.count}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
