@@ -10,7 +10,7 @@
 export const VIEW_WIDTH = 1920;
 
 /** Most characters (graphemes, spaces included) a message may hold. */
-export const MAX_CHARS = 40;
+export const MAX_CHARS = 30;
 
 /** Messages longer than this split onto two lines when they contain a space. */
 export const ONE_LINE_MAX = 14;
@@ -25,8 +25,8 @@ export type FlagStyle = (typeof FLAG_STYLES)[number];
 export type TextTone = 'dark' | 'light';
 
 export const TEXT_COLORS: Record<TextTone, string> = {
-  dark: 'rgba(0, 0, 0, 0.4)',
-  light: 'rgba(255, 255, 255, 0.4)',
+  dark: 'rgba(0, 0, 0, 0.6)',
+  light: 'rgba(255, 255, 255, 0.6)',
 };
 
 export type FlagTheme = {

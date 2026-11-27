@@ -8,7 +8,7 @@ Stateless OBS overlay that hangs a celebration message (a birthday, an anniversa
 
 ### Requirement: Message from the URL
 
-The system SHALL render the `message` query parameter at `/flagparty`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 40 characters across both lines. An empty or missing message SHALL render nothing.
+The system SHALL render the `message` query parameter at `/flagparty`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 30 characters across both lines. An empty or missing message SHALL render nothing.
 
 #### Scenario: Birthday message
 
@@ -58,7 +58,7 @@ The `theme` parameter SHALL choose the colors: `birthday-dark` (the default), `b
 
 ### Requirement: One letter tone per theme
 
-Letters SHALL be black at 40% opacity or white at 40% opacity, the same for every flag in a theme. Each named theme's colors SHALL be chosen to suit its one tone. For a fixed-color theme, the tone SHALL be whichever reads best on its least-contrasting color.
+Letters SHALL be black at 60% opacity or white at 60% opacity, the same for every flag in a theme. Each named theme's colors SHALL be chosen to suit its one tone. For a fixed-color theme, the tone SHALL be whichever reads best on its least-contrasting color.
 
 ### Requirement: Google font
 
