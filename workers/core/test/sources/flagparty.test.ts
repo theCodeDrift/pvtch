@@ -59,6 +59,12 @@ describe('splitMessage', () => {
     expect(lines[1]).toHaveLength(MAX_CHARS - 30);
   });
 
+  it('caps a very long query string', () => {
+    expect(
+      splitMessage('ab '.repeat(100_000)).flat().length
+    ).toBeLessThanOrEqual(MAX_CHARS);
+  });
+
   it('gives an emoji a single flag', () => {
     expect(splitMessage('hi 👩‍👩‍👧')[0]).toEqual(['h', 'i', ' ', '👩‍👩‍👧']);
   });
