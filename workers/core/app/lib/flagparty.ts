@@ -25,8 +25,8 @@ export type FlagStyle = (typeof FLAG_STYLES)[number];
 export type TextTone = 'dark' | 'light';
 
 export const TEXT_COLORS: Record<TextTone, string> = {
-  dark: 'rgba(0, 0, 0, 0.6)',
-  light: 'rgba(255, 255, 255, 0.6)',
+  dark: 'rgba(0, 0, 0, 0.85)',
+  light: 'rgba(255, 255, 255, 0.85)',
 };
 
 export type FlagTheme = {
