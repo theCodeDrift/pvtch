@@ -10,7 +10,7 @@
 export const VIEW_WIDTH = 1920;
 
 /** Most characters (graphemes, spaces included) a message may hold. */
-export const MAX_CHARS = 30;
+export const MAX_CHARS = 40;
 
 /** Messages longer than this split onto two lines when they contain a space. */
 export const ONE_LINE_MAX = 14;
