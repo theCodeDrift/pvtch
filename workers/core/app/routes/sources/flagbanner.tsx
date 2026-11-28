@@ -24,6 +24,9 @@ import {
 const STYLES = `
 html, body { background: transparent !important; }
 @keyframes fp-show { from { opacity: 0; } to { opacity: 1; } }
+/* Same frames under a second name on purpose: swapping only the delay on one
+   named animation re-times it instead of restarting it, so a banner readied
+   after 1s would jump straight to the end. A new name starts a fresh fade. */
 @keyframes fp-show-fallback { from { opacity: 0; } to { opacity: 1; } }
 .fp-banner { opacity: 0; animation: fp-show-fallback 600ms ease 4s both; }
 .fp-banner.fp-ready { animation: fp-show 600ms ease both; }
@@ -50,8 +53,21 @@ function useFontReady(font: FlagFont) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    const loaded = document.fonts
-      .load(`${font.weight} 64px ${font.family}`)
+    // document.fonts.load() only sees @font-face rules already parsed, so
+    // wait for the font stylesheets first. They are in the server HTML and
+    // normally done before scripts run; this covers any that are not.
+    const sheets = font.hrefs.map((href) => {
+      const link = document.querySelector<HTMLLinkElement>(
+        `link[rel="stylesheet"][href="${CSS.escape(href)}"]`
+      );
+      if (!link || link.sheet) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        link.addEventListener('load', () => resolve(), { once: true });
+        link.addEventListener('error', () => resolve(), { once: true });
+      });
+    });
+    const loaded = Promise.all(sheets)
+      .then(() => document.fonts.load(`${font.weight} 64px ${font.family}`))
       .catch(() => {});
     const timeout = new Promise((resolve) => setTimeout(resolve, FONT_WAIT_MS));
     void Promise.race([loaded, timeout]).then(() => {
@@ -63,7 +79,7 @@ function useFontReady(font: FlagFont) {
     return () => {
       cancelled = true;
     };
-  }, [font.family, font.weight]);
+  }, [font]);
   return ready;
 }
 
@@ -189,7 +205,13 @@ export default function FlagBannerSource() {
   const message = params.get('message') ?? '';
   const theme = parseTheme(params.get('theme'));
   const style = parseStyle(params.get('style'));
-  const font = parseFont(params.get('font'), params.get('weight'));
+  const fontParam = params.get('font');
+  const weightParam = params.get('weight');
+  // memoized so useFontReady's effect only reruns when the font changes
+  const font = useMemo(
+    () => parseFont(fontParam, weightParam),
+    [fontParam, weightParam]
+  );
 
   const layout = useMemo(
     () => layoutFlags(splitMessage(message), theme, style),
