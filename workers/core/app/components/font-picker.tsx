@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { FEATURED_FONTS, googleFontHref } from '@/lib/flagbanner';
+import { FEATURED_FONTS, FONT_NAME, googleFontHref } from '@/lib/flagbanner';
 import catalogJson from '@/lib/google-fonts.json';
 
 /** [family, category letter, upright weights in hundreds], most popular first. */
@@ -29,7 +29,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   m: 'Monospace',
 };
 
-const FAMILY_NAME = /^[\d A-Za-z]{1,64}$/;
 const SAMPLE = 'Happy Birthday';
 /** Rows rendered at a time; scrolling near the end renders the next page. */
 const PAGE = 80;
@@ -83,7 +82,7 @@ export function FontPicker({ value, onChange }: FontPickerProps) {
 
   const typed = search.trim().replaceAll(/\s+/g, ' ');
   const canUseTyped =
-    FAMILY_NAME.test(typed) &&
+    FONT_NAME.test(typed) &&
     !matches.some(([name]) => name.toLowerCase() === typed.toLowerCase());
 
   const updateSearch = (next: string) => {
@@ -224,7 +223,7 @@ export function FontPicker({ value, onChange }: FontPickerProps) {
               )}
             </CommandList>
             {/* load only the highlighted family, so browsing stays cheap */}
-            {open && previewFamily && FAMILY_NAME.test(previewFamily) && (
+            {open && previewFamily && FONT_NAME.test(previewFamily) && (
               <div className="border-t px-3 py-2">
                 <FontStylesheet family={previewFamily} />
                 <div className="text-xs text-muted-foreground">
