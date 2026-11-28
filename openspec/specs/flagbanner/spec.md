@@ -62,13 +62,13 @@ Letters SHALL be black at 85% opacity or white at 85% opacity, the same for ever
 
 ### Requirement: Google font
 
-The `font` parameter SHALL load any Google Fonts family by name (letters, digits and spaces only), with an optional `weight` from 100 to 900 in steps of 100. Without `font`, letters SHALL use Fredoka at weight 600. A custom font without `weight` SHALL use the family's regular cut. An invalid name SHALL fall back to Fredoka.
+The `font` parameter SHALL load any Google Fonts family by name (letters, digits and spaces only). The `weight` parameter SHALL take a name, not a number: `light`, `medium`, `bold` or `black`. Without `font`, letters SHALL use Poppins bold. A custom font without `weight` SHALL use the family's regular cut. An invalid name SHALL fall back to Poppins. The family's regular cut SHALL always load alongside the chosen weight, so a weight the family lacks falls back to the nearest one instead of a system font.
 
 ### Requirement: Configuration page
 
-The system SHALL offer a page at `/widgets/flagbanner`, listed under Widgets, where a streamer sets the message, theme (including custom hex colors), flag style, Google font and weight, sees a live preview, and copies the OBS URL. The URL SHALL carry only the message plus the parameters that differ from the defaults.
+The system SHALL offer a page at `/widgets/flagbanner`, listed under Widgets, in two columns: settings on the left; on the right a live preview of the banner on a 16:9 stream frame and the OBS URL. The settings SHALL cover the message, theme (including custom hex colors), flag style, font and weight. Fonts SHALL offer four featured looks (sans serif, serif, script, marker), each shown in its own typeface, plus a searchable list of the whole Google Fonts catalog that also accepts any typed name. Weights SHALL be offered by name, and only those the chosen family ships. The URL SHALL carry only the message plus the parameters that differ from the defaults.
 
 #### Scenario: Copy a configured URL
 
-- **WHEN** the streamer picks Anniversary (gold), Swallowtail and Playfair Display at weight 700
-- **THEN** the page shows `/sources/flagbanner?message=…&theme=anniversary-gold&style=duo&font=Playfair+Display&weight=700` with a copy button
+- **WHEN** the streamer picks Anniversary (gold), Swallowtail and Playfair Display at Bold
+- **THEN** the page shows `/sources/flagbanner?message=…&theme=anniversary-gold&style=duo&font=Playfair+Display&weight=bold` with a copy button

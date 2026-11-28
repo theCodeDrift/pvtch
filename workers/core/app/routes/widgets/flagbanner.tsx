@@ -8,18 +8,21 @@ import { instanceAccessContext } from '@/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
+import { FontPicker, weightsFor } from '@/components/font-picker';
 import {
   DEFAULT_FONT,
-  DEFAULT_FONT_WEIGHT,
   DEFAULT_STYLE,
   DEFAULT_THEME,
+  DEFAULT_WEIGHT,
   FLAG_STYLES,
+  FONT_WEIGHT_NAMES,
+  FONT_WEIGHTS,
   MAX_CHARS,
-  SUGGESTED_FONTS,
   THEME_NAMES,
   THEMES,
   splitMessage,
   type FlagStyle,
+  type FontWeightName,
 } from '@/lib/flagbanner';
 
 const CUSTOM = 'custom';
@@ -39,6 +42,24 @@ const STYLE_LABELS: Record<FlagStyle, string> = {
   duo: 'Swallowtail',
   circle: 'Circle',
 };
+
+const WEIGHT_LABELS: Record<FontWeightName, string> = {
+  light: 'Light',
+  medium: 'Medium',
+  bold: 'Bold',
+  black: 'Black',
+};
+
+/** The offered weight closest to the one asked for. */
+const nearestWeight = (
+  wanted: FontWeightName,
+  offered: FontWeightName[]
+): FontWeightName | undefined =>
+  [...offered].sort(
+    (a, b) =>
+      Math.abs(FONT_WEIGHTS[a] - FONT_WEIGHTS[wanted]) -
+      Math.abs(FONT_WEIGHTS[b] - FONT_WEIGHTS[wanted])
+  )[0];
 
 const HEX_CODE = /^#?([\da-f]{3}|[\da-f]{6})$/i;
 
@@ -118,13 +139,25 @@ export default function WidgetsFlagBanner() {
   const [colors, setColors] = useState(DEFAULT_COLOR);
   const [style, setStyle] = useState<FlagStyle>(DEFAULT_STYLE);
   const [font, setFont] = useState(DEFAULT_FONT);
-  const [weight, setWeight] = useState(`${DEFAULT_FONT_WEIGHT}`);
+  const [weight, setWeight] = useState<FontWeightName>(DEFAULT_WEIGHT);
 
   const flagCount = useMemo(
     () => splitMessage(message).flat().length,
     [message]
   );
   const customColors = useMemo(() => parseColors(colors), [colors]);
+
+  // Offer only the weights the family ships (all four for a typed-in family
+  // we don't know), and keep the streamer's pick when the font changes.
+  const offeredWeights = useMemo(() => {
+    const available = weightsFor(font);
+    return FONT_WEIGHT_NAMES.filter(
+      (name) => !available || available.includes(FONT_WEIGHTS[name])
+    );
+  }, [font]);
+  const effectiveWeight = offeredWeights.includes(weight)
+    ? weight
+    : nearestWeight(weight, offeredWeights);
 
   // Only non-default parameters go in the URL; message always does.
   const query = useMemo(() => {
@@ -136,15 +169,17 @@ export default function WidgetsFlagBanner() {
       params.set('theme', theme);
     }
     if (style !== DEFAULT_STYLE) params.set('style', style);
-    const trimmedFont = font.trim();
-    const isDefaultFont = !trimmedFont || trimmedFont === DEFAULT_FONT;
-    if (!isDefaultFont) params.set('font', trimmedFont);
-    const isDefaultWeight = weight === `${DEFAULT_FONT_WEIGHT}`;
-    if (weight && (!isDefaultFont || !isDefaultWeight)) {
-      params.set('weight', weight);
+    if (font === DEFAULT_FONT) {
+      if (effectiveWeight && effectiveWeight !== DEFAULT_WEIGHT) {
+        params.set('weight', effectiveWeight);
+      }
+    } else {
+      params.set('font', font);
+      // without a weight, a custom font uses its regular cut
+      if (effectiveWeight) params.set('weight', effectiveWeight);
     }
     return params.toString();
-  }, [message, theme, customColors, style, font, weight]);
+  }, [message, theme, customColors, style, font, effectiveWeight]);
 
   const obsUrl =
     globalThis.window === undefined
@@ -173,170 +208,153 @@ export default function WidgetsFlagBanner() {
         stream as bunting, one letter per flag.
       </p>
 
-      {/* Live Preview */}
-      {previewSrc && (
-        <div className="sticky top-16 z-10 bg-background py-2 not-prose">
-          <div className="relative w-full aspect-video rounded overflow-hidden border bg-zinc-800">
-            <iframe
-              key={previewSrc}
-              src={previewSrc}
-              className="w-full h-full border-0"
-              title="Flag Banner Preview"
+      {/* Two-column layout: config left, preview right */}
+      <div className="flex flex-col md:flex-row gap-8 not-prose">
+        {/* Left: Config */}
+        <div className="flex flex-col gap-6 md:w-1/2">
+          <Field>
+            <FieldLabel htmlFor="message">Message</FieldLabel>
+            <Input
+              id="message"
+              autoComplete="off"
+              placeholder={DEFAULT_MESSAGE}
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
             />
+            <FieldDescription>
+              Up to {MAX_CHARS} characters ({flagCount} used). Type{' '}
+              <code>/</code> where the second line should start; otherwise
+              longer messages break at the most even space.
+            </FieldDescription>
+          </Field>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-semibold">Colors</h2>
+            <div className="flex flex-wrap gap-2">
+              {THEME_NAMES.map((name) => (
+                <Button
+                  key={name}
+                  type="button"
+                  variant={theme === name ? 'default' : 'outline'}
+                  onClick={() => setTheme(name)}
+                  className="gap-2"
+                >
+                  <span className="flex">
+                    {THEMES[name].fills.slice(0, 4).map((fill) => (
+                      <span
+                        key={fill}
+                        className="h-3 w-3 rounded-full border border-black/10 -ml-1 first:ml-0"
+                        style={{ backgroundColor: fill }}
+                      />
+                    ))}
+                  </span>
+                  {THEME_LABELS[name] ?? name}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant={theme === CUSTOM ? 'default' : 'outline'}
+                onClick={() => setTheme(CUSTOM)}
+              >
+                Custom color
+              </Button>
+            </div>
+
+            {theme === CUSTOM && (
+              <Field>
+                <FieldLabel htmlFor="colors">Hex colors</FieldLabel>
+                <div className="flex gap-2">
+                  <ColorPicker
+                    color={customColors ? `#${customColors[0]}` : DEFAULT_COLOR}
+                    onChange={setColors}
+                  />
+                  <Input
+                    id="colors"
+                    autoComplete="off"
+                    className="font-mono"
+                    placeholder="#ff00ff, #00aaff"
+                    value={colors}
+                    onChange={(event) => setColors(event.target.value)}
+                    aria-invalid={!customColors}
+                  />
+                </div>
+                <FieldDescription>
+                  {customColors
+                    ? 'One color paints every flag. List several to cycle through them. Letters turn light or dark to suit.'
+                    : 'Use hex codes like #ff00ff or 0af, separated by commas.'}
+                </FieldDescription>
+              </Field>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-semibold">Flags</h2>
+            <div className="flex flex-wrap gap-2">
+              {FLAG_STYLES.map((name) => (
+                <Button
+                  key={name}
+                  type="button"
+                  variant={style === name ? 'default' : 'outline'}
+                  onClick={() => setStyle(name)}
+                >
+                  {STYLE_LABELS[name]}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-semibold">Font</h2>
+            <FontPicker value={font} onChange={setFont} />
+            {offeredWeights.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {FONT_WEIGHT_NAMES.map((name) => (
+                  <Button
+                    key={name}
+                    type="button"
+                    variant={effectiveWeight === name ? 'default' : 'outline'}
+                    disabled={!offeredWeights.includes(name)}
+                    onClick={() => setWeight(name)}
+                  >
+                    {WEIGHT_LABELS[name]}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <FieldDescription>{font} comes in one weight.</FieldDescription>
+            )}
           </div>
         </div>
-      )}
 
-      <div className="flex flex-col gap-6 pt-4 not-prose">
-        <Field>
-          <FieldLabel htmlFor="message">Message</FieldLabel>
-          <Input
-            id="message"
-            autoComplete="off"
-            placeholder={DEFAULT_MESSAGE}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-          <FieldDescription>
-            Up to {MAX_CHARS} characters ({flagCount} used). Type <code>/</code>{' '}
-            where the second line should start; otherwise longer messages break
-            at the most even space.
-          </FieldDescription>
-        </Field>
-
-        <h2 className="text-xl font-semibold mt-2">Colors</h2>
-        <div className="flex flex-wrap gap-2">
-          {THEME_NAMES.map((name) => (
-            <Button
-              key={name}
-              type="button"
-              variant={theme === name ? 'default' : 'outline'}
-              onClick={() => setTheme(name)}
-              className="gap-2"
-            >
-              <span className="flex">
-                {THEMES[name].fills.slice(0, 4).map((fill) => (
-                  <span
-                    key={fill}
-                    className="h-3 w-3 rounded-full border border-black/10 -ml-1 first:ml-0"
-                    style={{ backgroundColor: fill }}
+        {/* Right: Preview + OBS URL */}
+        <div className="md:w-1/2">
+          <div className="sticky top-16 flex flex-col gap-4">
+            <div>
+              <div className="relative w-full aspect-video rounded overflow-hidden border bg-linear-to-br from-zinc-600 via-zinc-800 to-zinc-900">
+                {previewSrc && (
+                  <iframe
+                    key={previewSrc}
+                    src={previewSrc}
+                    className="absolute inset-0 w-full h-full border-0"
+                    title="Flag Banner Preview"
                   />
-                ))}
-              </span>
-              {THEME_LABELS[name] ?? name}
-            </Button>
-          ))}
-          <Button
-            type="button"
-            variant={theme === CUSTOM ? 'default' : 'outline'}
-            onClick={() => setTheme(CUSTOM)}
-          >
-            Custom color
-          </Button>
-        </div>
-
-        {theme === CUSTOM && (
-          <Field>
-            <FieldLabel htmlFor="colors">Hex colors</FieldLabel>
-            <div className="flex gap-2">
-              <ColorPicker
-                color={customColors ? `#${customColors[0]}` : DEFAULT_COLOR}
-                onChange={setColors}
-              />
-              <Input
-                id="colors"
-                autoComplete="off"
-                className="font-mono"
-                placeholder="#ff00ff, #00aaff"
-                value={colors}
-                onChange={(event) => setColors(event.target.value)}
-                aria-invalid={!customColors}
-              />
+                )}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                As it hangs on a 1920 &times; 1080 stream.
+              </p>
             </div>
-            <FieldDescription>
-              {customColors
-                ? 'One color paints every flag. List several to cycle through them. Letters turn light or dark to suit.'
-                : 'Use hex codes like #ff00ff or 0af, separated by commas.'}
-            </FieldDescription>
-          </Field>
-        )}
 
-        <h2 className="text-xl font-semibold mt-2">Flags</h2>
-        <div className="flex flex-wrap gap-2">
-          {FLAG_STYLES.map((name) => (
-            <Button
-              key={name}
-              type="button"
-              variant={style === name ? 'default' : 'outline'}
-              onClick={() => setStyle(name)}
-            >
-              {STYLE_LABELS[name]}
-            </Button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-[1fr_8rem] gap-4">
-          <Field>
-            <FieldLabel htmlFor="font">Google font</FieldLabel>
-            <Input
-              id="font"
-              list="flagbanner-fonts"
-              autoComplete="off"
-              placeholder={DEFAULT_FONT}
-              value={font}
-              onChange={(event) => {
-                const next = event.target.value;
-                setFont(next);
-                // other families may lack Fredoka's 600 cut; start them regular
-                setWeight(
-                  next.trim() === DEFAULT_FONT ? `${DEFAULT_FONT_WEIGHT}` : ''
-                );
-              }}
-            />
-            <datalist id="flagbanner-fonts">
-              {SUGGESTED_FONTS.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-            <FieldDescription>
-              Pick a suggestion or type any family name from{' '}
-              <a
-                href="https://fonts.google.com"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                Google Fonts
-              </a>
-              .
-            </FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="weight">Weight</FieldLabel>
-            <Input
-              id="weight"
-              type="number"
-              min={100}
-              max={900}
-              step={100}
-              autoComplete="off"
-              placeholder="400"
-              value={weight}
-              onChange={(event) => setWeight(event.target.value)}
-            />
-            <FieldDescription>Blank for regular</FieldDescription>
-          </Field>
-        </div>
-      </div>
-
-      {/* OBS URL */}
-      <div className="mt-8 space-y-4 not-prose">
-        <h2 className="text-xl font-semibold">Your OBS URL</h2>
-        <div className="flex flex-row gap-2">
-          <Input readOnly value={obsUrl} className="font-mono" />
-          <Button type="button" variant="default" onClick={copyUrl}>
-            <Copy className="h-4 w-4" />
-          </Button>
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold">Your OBS URL</h2>
+              <div className="flex flex-row gap-2">
+                <Input readOnly value={obsUrl} className="font-mono" />
+                <Button type="button" variant="default" onClick={copyUrl}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -362,8 +380,7 @@ export default function WidgetsFlagBanner() {
           <ul className="text-muted-foreground list-disc ml-4 space-y-1">
             <li>Each emoji gets its own flag.</li>
             <li>
-              A font weight the family doesn&apos;t have falls back to a system
-              font. Check the preview.
+              Any Google font works: search the list or type its exact name.
             </li>
           </ul>
         </div>

@@ -115,29 +115,32 @@ describe('parseStyle', () => {
 });
 
 describe('parseFont', () => {
-  it('defaults to Fredoka semibold', () => {
+  it('defaults to Poppins bold', () => {
     const font = parseFont();
     expect(font.family.startsWith(`'${DEFAULT_FONT}'`)).toBe(true);
-    expect(font.weight).toBe(600);
-    expect(font.href).toBe(
-      'https://fonts.googleapis.com/css2?family=Fredoka:wght@600&display=swap'
-    );
+    expect(font.weight).toBe(700);
+    expect(font.hrefs).toEqual([
+      'https://fonts.googleapis.com/css2?family=Poppins&display=swap',
+      'https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap',
+    ]);
   });
 
-  it('loads any Google font by name', () => {
+  it('loads any Google font by name at its regular weight', () => {
     const font = parseFont('Baloo  2');
     expect(font.family.startsWith("'Baloo 2'")).toBe(true);
     expect(font.weight).toBe(400);
-    expect(font.href).toBe(
-      'https://fonts.googleapis.com/css2?family=Baloo+2&display=swap'
-    );
+    expect(font.hrefs).toEqual([
+      'https://fonts.googleapis.com/css2?family=Baloo+2&display=swap',
+    ]);
   });
 
-  it('adds a valid weight and ignores a bad one', () => {
-    expect(parseFont('Bungee', '700').href).toContain(
-      'family=Bungee:wght@700&'
+  it('takes named weights and ignores numbers', () => {
+    expect(parseFont('Bungee', 'Black').weight).toBe(900);
+    expect(parseFont('Bungee', 'light').hrefs[1]).toContain(
+      'family=Bungee:wght@300&'
     );
-    expect(parseFont('Bungee', '750').weight).toBe(400);
+    expect(parseFont('Bungee', '700').weight).toBe(400);
+    expect(parseFont(undefined, 'medium').weight).toBe(500);
   });
 
   it('refuses names that could break out of the stylesheet URL', () => {
