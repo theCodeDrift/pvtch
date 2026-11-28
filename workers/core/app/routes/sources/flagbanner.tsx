@@ -143,8 +143,11 @@ export default function FlagBannerSource() {
 
   return (
     <>
-      {/* React hoists this into <head>; inside the <svg> it would be inert */}
-      <link rel="stylesheet" href={font.href} precedence="default" />
+      {/* Outside the <svg>, where a <link> would be inert. No `precedence`:
+          React would block on it, and a weight Google refuses would throw. */}
+      {font.hrefs.map((href) => (
+        <link key={href} rel="stylesheet" href={href} />
+      ))}
       <svg
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         width="100%"

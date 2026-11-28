@@ -142,24 +142,27 @@ export const parseStyle = (input: string | null | undefined): FlagStyle => {
     : DEFAULT_STYLE;
 };
 
-export const DEFAULT_FONT = 'Fredoka';
-export const DEFAULT_FONT_WEIGHT = 600;
+/** Weights by name; numeric weights mean nothing to most streamers. */
+export const FONT_WEIGHTS = {
+  light: 300,
+  medium: 500,
+  bold: 700,
+  black: 900,
+} as const;
+export type FontWeightName = keyof typeof FONT_WEIGHTS;
+export const FONT_WEIGHT_NAMES = Object.keys(FONT_WEIGHTS) as FontWeightName[];
 
-/** Google fonts that suit bunting, offered as suggestions on the config page. */
-export const SUGGESTED_FONTS = [
-  'Fredoka',
-  'Baloo 2',
-  'Bungee',
-  'Chewy',
-  'Lilita One',
-  'Luckiest Guy',
-  'Pacifico',
-  'Playfair Display',
-  'Cinzel',
-  'Great Vibes',
-  'Righteous',
-  'Titan One',
-];
+export const DEFAULT_FONT = 'Poppins';
+export const DEFAULT_WEIGHT: FontWeightName = 'bold';
+
+/** One font per look, shown in its own typeface on the configure page. */
+export const FEATURED_FONTS = [
+  { label: 'Sans Serif', family: 'Poppins' },
+  { label: 'Serif', family: 'Playfair Display' },
+  { label: 'Script', family: 'Pacifico' },
+  { label: 'Marker', family: 'Permanent Marker' },
+] as const;
+
 const FONT_NAME = /^[\d A-Za-z]{1,64}$/;
 const FALLBACK_FONTS =
   "'Arial Rounded MT Bold', 'Segoe UI Black', 'Helvetica Neue', Arial, sans-serif";
@@ -168,14 +171,23 @@ export type FlagFont = {
   /** CSS font-family list, the Google font first. */
   family: string;
   weight: number;
-  /** Google Fonts stylesheet to load. */
-  href: string;
+  /** Google Fonts stylesheets to load. */
+  hrefs: string[];
 };
+
+/** The Google Fonts stylesheet for a family, at one weight or its default. */
+export const googleFontHref = (family: string, weight?: number) =>
+  `https://fonts.googleapis.com/css2?family=${family.replaceAll(' ', '+')}${
+    weight ? `:wght@${weight}` : ''
+  }&display=swap`;
 
 /**
  * Any Google Fonts family by name (`font=Bungee`, `font=Baloo+2`), with an
- * optional `weight`. A weight the family lacks makes Google refuse the
- * stylesheet, and the letters fall back to a system font.
+ * optional `weight` of light, medium, bold or black. Without `font`, letters
+ * use Poppins bold; a custom font without `weight` uses its regular cut.
+ *
+ * Google refuses a stylesheet asking for a weight the family lacks, so the
+ * regular cut always loads too and the browser falls back to it.
  */
 export const parseFont = (
   name: string | null | undefined,
@@ -185,19 +197,18 @@ export const parseFont = (
   const isCustom = FONT_NAME.test(trimmed);
   const family = isCustom ? trimmed : DEFAULT_FONT;
 
-  const parsedWeight = Number.parseInt(weight ?? '', 10);
-  const validWeight =
-    parsedWeight >= 100 && parsedWeight <= 900 && parsedWeight % 100 === 0
-      ? parsedWeight
-      : undefined;
-  // a custom family without a weight gets Google's default (400) cut
-  const chosen = validWeight ?? (isCustom ? undefined : DEFAULT_FONT_WEIGHT);
+  const key = (weight ?? '').trim().toLowerCase();
+  const named = Object.hasOwn(FONT_WEIGHTS, key)
+    ? FONT_WEIGHTS[key as FontWeightName]
+    : undefined;
+  const chosen = named ?? (isCustom ? undefined : FONT_WEIGHTS[DEFAULT_WEIGHT]);
 
-  const query = `${family.replaceAll(' ', '+')}${chosen ? `:wght@${chosen}` : ''}`;
   return {
     family: `'${family}', ${FALLBACK_FONTS}`,
     weight: chosen ?? 400,
-    href: `https://fonts.googleapis.com/css2?family=${query}&display=swap`,
+    hrefs: chosen
+      ? [googleFontHref(family), googleFontHref(family, chosen)]
+      : [googleFontHref(family)],
   };
 };
 
