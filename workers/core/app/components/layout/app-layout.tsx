@@ -49,6 +49,7 @@ const navigation = [
     items: [
       { title: 'Board', href: '/board' },
       { title: 'Coworking Tasks', href: '/widgets/todo' },
+      { title: 'Flag Banner', href: '/widgets/flagbanner' },
       { title: 'Progress Bar', href: '/widgets/progress' },
       { title: 'Quick Poll', href: '/widgets/1s' },
     ],

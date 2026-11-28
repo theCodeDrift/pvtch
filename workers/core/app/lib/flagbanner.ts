@@ -1,5 +1,5 @@
 /**
- * Flag Party: lays out a message as bunting, one letter per flag, hanging
+ * Flag Banner: lays out a message as bunting, one letter per flag, hanging
  * from up to two strings across the top of an OBS browser source.
  *
  * Everything here is pure so the route can render on the server and the
@@ -85,6 +85,7 @@ export const THEMES = {
 } satisfies Record<string, FlagTheme>;
 
 export type ThemeName = keyof typeof THEMES;
+export const THEME_NAMES = Object.keys(THEMES) as ThemeName[];
 export const DEFAULT_THEME: ThemeName = 'birthday-dark';
 export const DEFAULT_STYLE: FlagStyle = 'mono';
 
@@ -142,7 +143,23 @@ export const parseStyle = (input: string | null | undefined): FlagStyle => {
 };
 
 export const DEFAULT_FONT = 'Fredoka';
-const DEFAULT_FONT_WEIGHT = 600;
+export const DEFAULT_FONT_WEIGHT = 600;
+
+/** Google fonts that suit bunting, offered as suggestions on the config page. */
+export const SUGGESTED_FONTS = [
+  'Fredoka',
+  'Baloo 2',
+  'Bungee',
+  'Chewy',
+  'Lilita One',
+  'Luckiest Guy',
+  'Pacifico',
+  'Playfair Display',
+  'Cinzel',
+  'Great Vibes',
+  'Righteous',
+  'Titan One',
+];
 const FONT_NAME = /^[\d A-Za-z]{1,64}$/;
 const FALLBACK_FONTS =
   "'Arial Rounded MT Bold', 'Segoe UI Black', 'Helvetica Neue', Arial, sans-serif";
