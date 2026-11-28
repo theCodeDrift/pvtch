@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import type { Route } from './+types/flagbanner';
 import { useNoTheme } from '@/hooks/use-no-theme';
@@ -15,7 +15,18 @@ import {
   type PlacedFlag,
 } from '@/lib/flagbanner';
 
-const ANIMATIONS = `
+/**
+ * Hoisted into <head> so it applies before the first paint: the app's opaque
+ * page background never shows, and the banner stays hidden until its font
+ * has loaded and it fades in (see `ready` below). If scripts never run, a
+ * delayed fallback fade still shows it.
+ */
+const STYLES = `
+html, body { background: transparent !important; }
+@keyframes fp-show { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fp-show-fallback { from { opacity: 0; } to { opacity: 1; } }
+.fp-banner { opacity: 0; animation: fp-show-fallback 600ms ease 4s both; }
+.fp-banner.fp-ready { animation: fp-show 600ms ease both; }
 @keyframes fp-drop {
   from { opacity: 0; transform: translateY(-40px) rotate(-12deg); }
   to { opacity: 1; transform: none; }
@@ -24,9 +35,56 @@ const ANIMATIONS = `
   0%, 100% { transform: rotate(-2.5deg); }
   50% { transform: rotate(2.5deg); }
 }
-.fp-drop { animation: fp-drop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.fp-ready .fp-drop { animation: fp-drop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .fp-sway { animation: fp-sway 3.4s ease-in-out infinite; }
 `;
+
+/** Longest we hold the banner back waiting for its Google font. */
+const FONT_WAIT_MS = 2500;
+
+/**
+ * True once the banner's font has loaded (or FONT_WAIT_MS has passed), so it
+ * fades in already in its real typeface instead of swapping fonts on screen.
+ */
+function useFontReady(font: FlagFont) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const loaded = document.fonts
+      .load(`${font.weight} 64px ${font.family}`)
+      .catch(() => {});
+    const timeout = new Promise((resolve) => setTimeout(resolve, FONT_WAIT_MS));
+    void Promise.race([loaded, timeout]).then(() => {
+      // one frame later, so the hidden state has painted and the fade runs
+      requestAnimationFrame(() => {
+        if (!cancelled) setReady(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [font.family, font.weight]);
+  return ready;
+}
+
+type ObsVisibleEvent = CustomEvent<{ visible: boolean }>;
+
+/**
+ * A counter that bumps each time OBS shows the source again, so the banner
+ * can replay its entrance instead of popping back in mid-sway.
+ */
+function useObsShowCount() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const onVisible = (event: Event) => {
+      if ((event as ObsVisibleEvent).detail.visible) setCount((n) => n + 1);
+    };
+    globalThis.addEventListener('obsSourceVisibleChanged', onVisible);
+    return () =>
+      globalThis.removeEventListener('obsSourceVisibleChanged', onVisible);
+  }, []);
+  return count;
+}
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Flag Banner - PVTCH' }];
@@ -137,26 +195,36 @@ export default function FlagBannerSource() {
     () => layoutFlags(splitMessage(message), theme, style),
     [message, theme, style]
   );
+  const ready = useFontReady(font);
+  const showCount = useObsShowCount();
+
+  const styles = (
+    <style href="flagbanner" precedence="default">
+      {STYLES}
+    </style>
+  );
 
   if (layout.flags.length === 0) {
-    return;
+    return styles;
   }
 
   return (
     <>
+      {styles}
       {/* Outside the <svg>, where a <link> would be inert. No `precedence`:
           React would block on it, and a weight Google refuses would throw. */}
       {font.hrefs.map((href) => (
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <svg
+        key={showCount}
+        className={ready ? 'fp-banner fp-ready' : 'fp-banner'}
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         width="100%"
         role="img"
         aria-label={message}
         style={{ display: 'block', overflow: 'visible' }}
       >
-        <style>{ANIMATIONS}</style>
         <defs>
           <filter id="fp-shadow" x="-30%" y="-30%" width="160%" height="160%">
             <feDropShadow
