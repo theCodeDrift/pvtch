@@ -72,3 +72,12 @@ The system SHALL offer a page at `/widgets/flagbanner`, listed under Widgets, in
 
 - **WHEN** the streamer picks Anniversary (gold), Swallowtail and Playfair Display at Bold
 - **THEN** the page shows `/sources/flagbanner?message=…&theme=anniversary-gold&style=duo&font=Playfair+Display&weight=bold` with a copy button
+
+### Requirement: Clean entrance
+
+The overlay SHALL be transparent from the first paint, with no page background showing while it loads. The banner SHALL stay hidden until its font has loaded (or 2.5 seconds have passed), then fade in over 600ms before the flags drop in. If scripts never run, the banner SHALL still fade in after 4 seconds. When OBS shows the source again, the banner SHALL replay its entrance.
+
+#### Scenario: Changing the browser source URL
+
+- **WHEN** a streamer points the browser source at a new Flag Banner URL
+- **THEN** the source shows nothing (no opaque block, no fallback font) until the new banner fades in
