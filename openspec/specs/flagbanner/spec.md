@@ -8,7 +8,7 @@ Stateless OBS overlay (`/sources/flagbanner`, configured at `/widgets/flagbanner
 
 ### Requirement: Message from the URL
 
-The system SHALL render the `message` query parameter at `/sources/flagbanner`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 30 characters across both lines. An empty or missing message SHALL render nothing.
+The system SHALL render the `message` query parameter at `/sources/flagbanner`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 40 characters across both lines. An empty or missing message SHALL render nothing.
 
 #### Scenario: Birthday message
 
