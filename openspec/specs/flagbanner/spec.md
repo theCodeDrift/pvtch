@@ -31,7 +31,7 @@ The first `/` in the message SHALL break it onto a second line; later slashes SH
 
 ### Requirement: Curved strings that scale
 
-Each line SHALL hang from a string that curves from the left edge to the right edge of the source. A single string SHALL sag deeper than each of two strings. Flags SHALL be SVG, sized to the longest line and shared by both lines, and the overlay SHALL scale to the browser source's width. Every flag SHALL hang straight down from a short cord tied to the string.
+Each line SHALL hang from a string that curves from the left edge to the right edge of the source, fading to transparent at both ends and fully opaque wherever a flag can hang. A single string SHALL sag deeper than each of two strings. Flags SHALL be SVG, sized to the longest line and shared by both lines, and the overlay SHALL scale to the browser source's width. Every flag SHALL hang straight down from a short cord tied to the string.
 
 #### Scenario: Two lines are shallower
 

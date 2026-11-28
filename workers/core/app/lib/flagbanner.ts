@@ -319,7 +319,7 @@ const LINE_GAP = 48;
 const BOTTOM_PAD = 24;
 const MAX_FLAG_WIDTH = 130;
 /** Flags hang between these fractions of the string's width. */
-const SPAN_START = 0.06;
+export const SPAN_START = 0.06;
 const SPAN_END = 0.94;
 /** A flag's width as a share of its slot; the rest is the gap between. */
 const FILL = 0.86;

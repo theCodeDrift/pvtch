@@ -7,6 +7,7 @@ import {
   parseFont,
   parseStyle,
   parseTheme,
+  SPAN_START,
   splitMessage,
   type FlagFont,
   type FlagLayout,
@@ -166,13 +167,29 @@ export default function FlagBannerSource() {
               floodOpacity={0.35}
             />
           </filter>
+          {/* the string fades out toward both edges, so a source narrower
+              than the stream doesn't end in a hard cut; it is fully opaque
+              by the first place a flag can hang */}
+          <linearGradient
+            id="fp-rope"
+            gradientUnits="userSpaceOnUse"
+            x1={0}
+            y1={0}
+            x2={layout.width}
+            y2={0}
+          >
+            <stop offset={0} stopColor={layout.rope} stopOpacity={0} />
+            <stop offset={SPAN_START} stopColor={layout.rope} />
+            <stop offset={1 - SPAN_START} stopColor={layout.rope} />
+            <stop offset={1} stopColor={layout.rope} stopOpacity={0} />
+          </linearGradient>
         </defs>
         {layout.ropes.map((rope) => (
           <path
             key={rope.d}
             d={rope.d}
             fill="none"
-            stroke={layout.rope}
+            stroke="url(#fp-rope)"
             strokeWidth={5}
             strokeLinecap="round"
             filter="url(#fp-shadow)"
