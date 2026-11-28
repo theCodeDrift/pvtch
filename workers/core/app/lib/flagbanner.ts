@@ -163,7 +163,8 @@ export const FEATURED_FONTS = [
   { label: 'Marker', family: 'Permanent Marker' },
 ] as const;
 
-const FONT_NAME = /^[\d A-Za-z]{1,64}$/;
+/** Google Fonts family names this overlay accepts; safe in a URL and CSS. */
+export const FONT_NAME = /^[\d A-Za-z]{1,64}$/;
 const FALLBACK_FONTS =
   "'Arial Rounded MT Bold', 'Segoe UI Black', 'Helvetica Neue', Arial, sans-serif";
 
