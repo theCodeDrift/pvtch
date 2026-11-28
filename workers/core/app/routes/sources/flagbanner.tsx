@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import type { Route } from './+types/flagparty';
+import type { Route } from './+types/flagbanner';
 import { useNoTheme } from '@/hooks/use-no-theme';
 import {
   layoutFlags,
@@ -12,7 +12,7 @@ import {
   type FlagLayout,
   type FlagStyle,
   type PlacedFlag,
-} from '@/lib/flagparty';
+} from '@/lib/flagbanner';
 
 const ANIMATIONS = `
 @keyframes fp-drop {
@@ -28,7 +28,7 @@ const ANIMATIONS = `
 `;
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Flag Party - PVTCH' }];
+  return [{ title: 'Flag Banner - PVTCH' }];
 }
 
 type ShapeProps = {
@@ -121,10 +121,10 @@ function FlagShape({ flag, style, width, layout, font }: ShapeProps) {
 }
 
 /**
- * Flag Party OBS source: `/flagparty?theme=birthday&message=Happy+Birthday`.
+ * Flag Banner OBS source: `/sources/flagbanner?theme=birthday&message=Happy+Birthday`.
  * Stateless; everything comes from the query string.
  */
-export default function FlagPartySource() {
+export default function FlagBannerSource() {
   useNoTheme();
   const [params] = useSearchParams();
   const message = params.get('message') ?? '';

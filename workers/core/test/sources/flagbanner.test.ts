@@ -13,7 +13,7 @@ import {
   splitMessage,
   TEXT_COLORS,
   THEMES,
-} from '../../app/lib/flagparty';
+} from '../../app/lib/flagbanner';
 
 const text = (lines: string[][]) => lines.map((line) => line.join(''));
 const sagOf = (message: string) =>

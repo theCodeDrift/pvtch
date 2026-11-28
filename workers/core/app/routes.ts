@@ -15,6 +15,7 @@ export default [
     route('widgets/progress', './routes/widgets/progress.tsx'),
     route('widgets/1s', './routes/widgets/1s.tsx'),
     route('widgets/todo', './routes/widgets/todo.tsx'),
+    route('widgets/flagbanner', './routes/widgets/flagbanner.tsx'),
     route('helpers/lingo', './routes/helpers/lingo.tsx'),
     route('bots/lingual', './routes/bots.lingual.tsx'),
     route('howto/deploy-your-own', './routes/howto/deploy-your-own.tsx'),
@@ -36,8 +37,8 @@ export default [
   ),
   route('sources/todo/:channel', './routes/sources/todo.$channel.tsx'),
   route('sources/1s/:channel', './routes/sources/1s.$channel.tsx'),
-  // Stateless, so no :channel; kept short because streamers type it by hand.
-  route('flagparty', './routes/sources/flagparty.tsx'),
+  // Stateless: everything comes from the query string, so no :channel.
+  route('sources/flagbanner', './routes/sources/flagbanner.tsx'),
 
   // Board widget (anonymous-by-URL, no layout)
   route('board/new', './routes/board.new.tsx'),

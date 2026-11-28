@@ -1,18 +1,18 @@
-# flagparty Specification
+# flagbanner Specification
 
 ## Purpose
 
-Stateless OBS overlay that hangs a celebration message (a birthday, an anniversary, anything) as bunting across the top of the stream: one letter per flag, up to two strings. Everything comes from the query string of `/flagparty`; there is no storage, login or chat connection.
+Stateless OBS overlay (`/sources/flagbanner`, configured at `/widgets/flagbanner`) that hangs a celebration message (a birthday, an anniversary, anything) as bunting across the top of the stream: one letter per flag, up to two strings. Everything comes from the query string of `/sources/flagbanner`; there is no storage, login or chat connection.
 
 ## Requirements
 
 ### Requirement: Message from the URL
 
-The system SHALL render the `message` query parameter at `/flagparty`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 30 characters across both lines. An empty or missing message SHALL render nothing.
+The system SHALL render the `message` query parameter at `/sources/flagbanner`, one flag per user-perceived character (an emoji is one flag). Spaces SHALL leave a gap instead of a flag. Runs of whitespace SHALL collapse to one space. The message SHALL be capped at 30 characters across both lines. An empty or missing message SHALL render nothing.
 
 #### Scenario: Birthday message
 
-- **WHEN** a browser source loads `/flagparty?theme=birthday&message=Happy+Birthday+Morgan+and+Marie`
+- **WHEN** a browser source loads `/sources/flagbanner?theme=birthday&message=Happy+Birthday+Morgan+and+Marie`
 - **THEN** each letter hangs on its own flag and the spaces show as gaps
 
 ### Requirement: Up to two lines
@@ -63,3 +63,12 @@ Letters SHALL be black at 85% opacity or white at 85% opacity, the same for ever
 ### Requirement: Google font
 
 The `font` parameter SHALL load any Google Fonts family by name (letters, digits and spaces only), with an optional `weight` from 100 to 900 in steps of 100. Without `font`, letters SHALL use Fredoka at weight 600. A custom font without `weight` SHALL use the family's regular cut. An invalid name SHALL fall back to Fredoka.
+
+### Requirement: Configuration page
+
+The system SHALL offer a page at `/widgets/flagbanner`, listed under Widgets, where a streamer sets the message, theme (including custom hex colors), flag style, Google font and weight, sees a live preview, and copies the OBS URL. The URL SHALL carry only the message plus the parameters that differ from the defaults.
+
+#### Scenario: Copy a configured URL
+
+- **WHEN** the streamer picks Anniversary (gold), Swallowtail and Playfair Display at weight 700
+- **THEN** the page shows `/sources/flagbanner?message=…&theme=anniversary-gold&style=duo&font=Playfair+Display&weight=700` with a copy button
